@@ -483,7 +483,7 @@ body{
 
 /* 地が濃くなったぶん、浮いているものの影も強めます */
 #pv-side{
-  background:rgba(255,255,255,.96);
+  background:#8C1235;
   box-shadow:0 1px 2px rgba(0,0,0,.05),0 22px 54px rgba(0,0,0,.13);
 }
 #kb-view .ct-card.status-progress,
@@ -623,7 +623,7 @@ body{
 /* 左メニューも同じ考え方で */
 #pv-side{
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.9),
+    inset 0 1px 0 rgba(255,255,255,.22),
     0 1px 2px rgba(0,0,0,.06),
     0 10px 24px rgba(0,0,0,.07),
     0 30px 60px rgba(0,0,0,.13);
