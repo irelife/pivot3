@@ -1,7 +1,7 @@
 body{padding-left:238px;}
 #pv-side{
   position:fixed;left:0;top:0;bottom:0;width:238px;z-index:70;
-  background:#8C1235;color:#fff;padding:22px 0 18px;overflow-y:auto;
+  background:#1d1d1f;color:#fff;padding:22px 0 18px;overflow-y:auto;
   font-family:inherit;-webkit-font-smoothing:antialiased;
 }
 #pv-side .lg{
