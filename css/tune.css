@@ -2509,3 +2509,14 @@ body:has(#bstat-modal.active) #pv-side a[data-k="kanban"]{
 body:has(#bstat-modal.active) #pv-side a[data-a="rank"]{
   background:rgba(255,255,255,.16);color:#fff;font-weight:600;
 }
+
+
+/* ============================================================
+   pv3-blue : PIVOT3 を黒から青（藍）に変える（PIVOT2 と入れ替え）
+   ひとつ上の pv3-black で「地を黒・文字を白」にしてあるので、
+   ここでは地の色だけを青に塗り替えます。文字が白のままなので
+   これだけで足ります。
+   このブロックを消せば、黒に戻ります。
+   ============================================================ */
+:root{ --pv-ident:#1B4965; }
+#pv-side{ background:#1B4965; }
