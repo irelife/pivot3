@@ -266,16 +266,18 @@ select:focus-visible,textarea:focus-visible{
   --k-gray:#8b8b90; --k-gray-bg:#f0f0f2;
 }
 
-/* ---- 左メニュー：白地・見出しで区切る・選択中は黒 ---- */
+/* ---- 左メニュー：臙脂（PIVOT3の目印）・見出しで区切る・選択中は明るく ----
+   ★この色が PIVOT3 と PIVOT2 を見分ける印です。
+     背景色の指定は、このファイルの中の3か所（ここ・「端から浮かせます」・
+     「影を強めます」）にあります。変えるときは3か所ともそろえてください。 */
 #pv-side{
-  background:#8C1235!important;color:#fff;
-  border-right:1px solid var(--pv-line);
+  background:#8C1235;color:#fff;
   padding:20px 12px 18px;
 }
 #pv-side .lg{color:#fff;padding:0 12px 16px;font-size:21px;}
-#pv-side .lg span{color:rgba(255,255,255,.65);}
+#pv-side .lg span{color:rgba(255,255,255,.75);}
 #pv-side .grp{
-  padding:16px 12px 6px;color:rgba(255,255,255,.6);
+  padding:16px 12px 6px;color:rgba(255,255,255,.72);
   font-size:11px;font-weight:600;letter-spacing:.06em;
 }
 #pv-side a{
