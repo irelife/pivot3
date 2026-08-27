@@ -272,21 +272,21 @@ select:focus-visible,textarea:focus-visible{
   border-right:1px solid var(--pv-line);
   padding:20px 12px 18px;
 }
-#pv-side .lg{color:var(--pv-ink);padding:0 12px 16px;font-size:21px;}
-#pv-side .lg span{color:var(--pv-ink-3);}
+#pv-side .lg{color:#fff;padding:0 12px 16px;font-size:21px;}
+#pv-side .lg span{color:rgba(255,255,255,.65);}
 #pv-side .grp{
   padding:16px 12px 6px;color:rgba(255,255,255,.6);
   font-size:11px;font-weight:600;letter-spacing:.06em;
 }
 #pv-side a{
   border-radius:11px;margin-bottom:2px;padding:10px 12px;
-  color:var(--pv-ink-2);font-size:14px;font-weight:500;
+  color:rgba(255,255,255,.85);font-size:14px;font-weight:500;
 }
-#pv-side a:hover{background:rgba(0,0,0,.045);color:var(--pv-ink);}
+#pv-side a:hover{background:rgba(255,255,255,.1);color:#fff;}
 body:not(.tab-kanban):not(.tab-rent) #pv-side a[data-k="pivot"],
 body.tab-kanban #pv-side a[data-k="kanban"],
 body.tab-rent   #pv-side a[data-k="rent"]{
-  background:var(--pv-ink);color:#fff;font-weight:600;box-shadow:none;
+  background:rgba(255,255,255,.18);color:#fff;font-weight:600;box-shadow:none;
 }
 /* 画面内のランキングのボタンは、左メニューに移したので出しません */
 .broker-stat-btn{display:none!important;}
