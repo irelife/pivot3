@@ -268,14 +268,14 @@ select:focus-visible,textarea:focus-visible{
 
 /* ---- 左メニュー：白地・見出しで区切る・選択中は黒 ---- */
 #pv-side{
-  background:#fff;color:var(--pv-ink);
+  background:#8C1235;color:#fff;
   border-right:1px solid var(--pv-line);
   padding:20px 12px 18px;
 }
 #pv-side .lg{color:var(--pv-ink);padding:0 12px 16px;font-size:21px;}
 #pv-side .lg span{color:var(--pv-ink-3);}
 #pv-side .grp{
-  padding:16px 12px 6px;color:var(--pv-ink-3);
+#pv-side .lg span{color:var(--pv-ink-3);}
   font-size:11px;font-weight:600;letter-spacing:.06em;
 }
 #pv-side a{
