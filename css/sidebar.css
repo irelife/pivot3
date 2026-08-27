@@ -1,7 +1,7 @@
 body{padding-left:238px;}
 #pv-side{
   position:fixed;left:0;top:0;bottom:0;width:238px;z-index:70;
-  background:#1d1d1f;color:#fff;padding:22px 0 18px;overflow-y:auto;
+  background:#8C1235;color:#fff;padding:22px 0 18px;overflow-y:auto;
   font-family:inherit;-webkit-font-smoothing:antialiased;
 }
 #pv-side .lg{
@@ -26,7 +26,7 @@ body{padding-left:238px;}
 #pv-side a svg{width:19px;height:19px;flex:none;}
 /* いまいる画面。body に付く印だけで決めています */
 body:not(.tab-kanban):not(.tab-rent) #pv-side a[data-k="pivot"],
-body.tab-kanban #pv-side a[data-k="kanban"],
+'<div class="lg" title="PIVOT3\u30C8\u30C3\u30D7\u3078">PIVOT3 OKAYAMA'
 body.tab-rent   #pv-side a[data-k="rent"]{
   background:rgba(255,255,255,.13);color:#fff;font-weight:600;
   box-shadow:inset 3px 0 0 var(--pv-accent,#007aff);
