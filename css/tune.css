@@ -265,29 +265,6 @@ select:focus-visible,textarea:focus-visible{
   --k-blue:#1d1d1f; --k-blue-bg:#f7f7f8;   /* 進行中＝黒 */
   --k-gray:#8b8b90; --k-gray-bg:#f0f0f2;
 }
-
-/* ---- 左メニュー：臙脂（PIVOT3の目印）・見出しで区切る・選択中は明るく ----
-   ★この色が PIVOT3 と PIVOT2 を見分ける印です。
-     背景色の指定は、このファイルの中の3か所（ここ・「端から浮かせます」・
-     「影を強めます」）にあります。変えるときは3か所ともそろえてください。 */
-#pv-side{
-  background:#8C1235;color:#fff;
-  padding:20px 12px 18px;
-}
-#pv-side .lg{color:#fff;padding:0 12px 16px;font-size:21px;}
-#pv-side .lg span{color:rgba(255,255,255,.75);}
-#pv-side .grp{
-  padding:16px 12px 6px;color:rgba(255,255,255,.72);
-  font-size:11px;font-weight:600;letter-spacing:.06em;
-}
-#pv-side a{
-  border-radius:11px;margin-bottom:2px;padding:10px 12px;
-  color:rgba(255,255,255,.85);font-size:14px;font-weight:500;
-}
-#pv-side a:hover{background:rgba(255,255,255,.1);color:#fff;}
-body:not(.tab-kanban):not(.tab-rent) #pv-side a[data-k="pivot"],
-body.tab-kanban #pv-side a[data-k="kanban"],
-body.tab-rent   #pv-side a[data-k="rent"]{
   background:rgba(255,255,255,.18);color:#fff;font-weight:600;box-shadow:none;
 }
 /* 画面内のランキングのボタンは、左メニューに移したので出しません */
@@ -363,7 +340,7 @@ body{padding-left:256px;}
   border:1px solid rgba(255,255,255,.16);
   border-right:1px solid rgba(255,255,255,.16);
   border-radius:22px;
-  background:#8C1235;
+  background:#EDD1DA;
   box-shadow:0 1px 2px rgba(0,0,0,.04),0 18px 46px rgba(0,0,0,.10);
 }
 /* ---- 上の帯と各画面は、地をそのまま見せます ----
@@ -384,10 +361,10 @@ body{padding-left:256px;}
              0 1px 2px rgba(0,0,0,.05),0 16px 38px rgba(0,0,0,.10);
 }
 #kb-view .ct-card.status-progress:hover{
-  box-shadow:inset 4px 0 0 var(--pv-ink),
-             0 2px 6px rgba(0,0,0,.07),0 26px 56px rgba(0,0,0,.15);
-}
-#kb-view .ct-card.status-almost{
+  border:1px solid rgba(107,15,42,.14);
+  border-right:1px solid rgba(107,15,42,.14);
+  border-radius:22px;
+  background:#EDD1DA;
   box-shadow:inset 4px 0 0 var(--pv-ink),
              0 1px 2px rgba(0,0,0,.05),0 16px 38px rgba(0,0,0,.10);
 }
@@ -623,7 +600,7 @@ body{
 /* 左メニューも同じ考え方で */
 #pv-side{
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.22),
+    inset 0 1px 0 rgba(255,255,255,.55),
     0 1px 2px rgba(0,0,0,.06),
     0 10px 24px rgba(0,0,0,.07),
     0 30px 60px rgba(0,0,0,.13);
