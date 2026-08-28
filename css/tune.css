@@ -2602,3 +2602,43 @@ body:has(#bstat-modal.active) #pv-side a[data-a="rank"]{
              0 2px 6px rgba(0,0,0,.07),
              0 14px 36px rgba(63,107,74,.16);
 }
+
+
+/* ============================================================
+   pv3-white : PIVOT3 の左メニューを白地・黒文字にする
+     ・地を白、文字を黒に（青をやめる）
+     ・上の帯（--pv-ident）は黒
+     ・アイコンの線は文字色に追従するので、指定は文字色だけで足ります
+   ★PIVOT2（黒）とは、左メニューの地の色で見分けます。
+   このブロックを消せば、ひとつ上の青に戻ります。
+   ============================================================ */
+:root{ --pv-ident:#17171a; }
+
+#pv-side{
+  background:#ffffff;
+  color:#17171a;
+  border:0;
+  border-right:1px solid #e5e5ea;
+}
+#pv-side .lg{color:#17171a;}
+#pv-side .lg span{color:#8b8b90;}
+#pv-side .grp{color:#8b8b90;}
+#pv-side a{color:#3a3a3e;}
+#pv-side a:hover{background:rgba(0,0,0,.05);color:#17171a;}
+
+/* いま開いている画面の行 */
+body:not(.tab-kanban):not(.tab-rent) #pv-side a[data-k="pivot"],
+body.tab-kanban #pv-side a[data-k="kanban"],
+body.tab-rent   #pv-side a[data-k="rent"]{
+  background:rgba(0,0,0,.06);
+  color:#17171a;
+  font-weight:600;
+  box-shadow:inset 3px 0 0 #17171a;
+}
+/* 客付業者ランキングを開いているとき */
+body:has(#bstat-modal.active) #pv-side a[data-k="kanban"]{
+  background:transparent!important;color:#3a3a3e!important;font-weight:500!important;
+}
+body:has(#bstat-modal.active) #pv-side a[data-a="rank"]{
+  background:rgba(0,0,0,.06);color:#17171a;font-weight:600;
+}
