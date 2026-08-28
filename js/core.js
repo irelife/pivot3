@@ -1092,3 +1092,107 @@ function switchApp(which){
   // 未送信の変更があれば送信だけ行う(取り込みはしない)。
   try{ if(typeof window.__pushNow === 'function'){ window.__pushNow(); } }catch(e){}
 }
+
+
+/* ============================================================
+   iPhone / iPad で「CSV・PDF が出せない」を直す   pv-ios-export
+     ・iPhone の Safari は、ふつうの「ダウンロード」を無視して
+       ファイルを画面に映すだけで終わってしまいます。
+       そこで iPhone のときだけ「共有シート」を出し、
+       そこから「"ファイル"に保存」を選べるようにします。
+     ・別ウィンドウでの印刷も iPhone では働かないので、
+       画面の中に重ねて印刷できるようにします。
+     ★パソコンと Android の動きは、これまでと一切変わりません。
+     ★他のファイル(contracts.js など)は書き換えず、
+       ここから横取りして差し替えています。
+   ============================================================ */
+(function(){
+  // iPad は「Macintosh」と名乗るので、指で触れるかどうかも見ます
+  var _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  window.PV_IS_IOS = _isIOS;
+
+  /* --- ① 作ったファイルの中身を覚えておく ---
+     ダウンロード用のリンクは「blob:...」という置き場所しか持っていません。
+     あとで共有シートに渡せるよう、中身そのものを控えておきます。 */
+  var _keep = {};
+  var _create = URL.createObjectURL;
+  var _revoke = URL.revokeObjectURL;
+  URL.createObjectURL = function(b){
+    var u = _create.call(URL, b);
+    try{ if(b instanceof Blob) _keep[u] = b; }catch(e){}
+    return u;
+  };
+  URL.revokeObjectURL = function(u){
+    // 共有シートが読み終わる前に捨てないよう、少し置いてから忘れます
+    setTimeout(function(){ try{ delete _keep[u]; }catch(e){} }, 30000);
+    return _revoke.call(URL, u);
+  };
+
+  /* --- ② 「保存」の押しかたを iPhone のやり方に差し替える ---
+     CSV・PDF・バックアップJSON など、すべての保存がここを通ります。 */
+  var _click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function(){
+    if(_isIOS){
+      var name = this.getAttribute('download');
+      var b = name ? _keep[this.href] : null;
+      if(b && typeof File === 'function' && navigator.canShare){
+        try{
+          var f = new File([b], name, {type: b.type || 'application/octet-stream'});
+          if(navigator.canShare({files:[f]})){
+            // 「"ファイル"に保存」「メールで送信」などが選べます
+            navigator.share({files:[f], title:name}).catch(function(){});
+            return;
+          }
+        }catch(e){ /* だめならふつうのやり方に戻します */ }
+      }
+    }
+    return _click.apply(this, arguments);
+  };
+
+  /* --- ③ iPhone でも印刷・PDF保存ができる画面を出す ---
+     別ウィンドウを開かず、この画面の中に重ねて表示します。 */
+  window.PV_PRINT_HTML = function(html){
+    var old = document.getElementById('pv-print-ov');
+    if(old && old.parentNode) old.parentNode.removeChild(old);
+
+    var ov = document.createElement('div');
+    ov.id = 'pv-print-ov';
+    ov.setAttribute('style','position:fixed;top:0;right:0;bottom:0;left:0;z-index:100000;'+
+      'background:#fff;display:flex;flex-direction:column;');
+
+    var bar = document.createElement('div');
+    bar.setAttribute('style','flex:0 0 auto;display:flex;gap:10px;justify-content:space-between;'+
+      'align-items:center;padding:10px 12px;background:#1f3a5f;');
+    var bs = 'font-size:15px;font-weight:700;padding:9px 16px;border:0;border-radius:8px;cursor:pointer;';
+
+    var close = document.createElement('button');
+    close.type = 'button'; close.textContent = '✕ 閉じる';
+    close.setAttribute('style', bs + 'background:rgba(255,255,255,.18);color:#fff;');
+
+    var go = document.createElement('button');
+    go.type = 'button'; go.textContent = '🖨 PDF / 印刷';
+    go.setAttribute('style', bs + 'background:#fff;color:#1f3a5f;');
+
+    bar.appendChild(close); bar.appendChild(go);
+
+    var fr = document.createElement('iframe');
+    fr.setAttribute('style','flex:1 1 auto;width:100%;border:0;background:#fff;');
+
+    ov.appendChild(bar); ov.appendChild(fr);
+    document.body.appendChild(ov);
+
+    var doPrint = function(){
+      try{ fr.contentWindow.focus(); fr.contentWindow.print(); }
+      catch(e){
+        alert('印刷を開けませんでした。\n画面下の「共有」→「プリント」からもPDFにできます。');
+      }
+    };
+    close.onclick = function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); };
+    go.onclick = doPrint;
+    fr.onload = function(){ setTimeout(doPrint, 400); };
+
+    if('srcdoc' in fr){ fr.srcdoc = html; }
+    else{ var d = fr.contentWindow.document; d.open(); d.write(html); d.close(); }
+  };
+})();
