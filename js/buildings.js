@@ -929,8 +929,6 @@ function showDocOverlay(html, title){
     window.PV_PRINT_HTML(html, String(title||'').replace(/[^ぁ-んァ-ヶ一-龠A-Za-z0-9]/g,''));
     return;
   }
-  closeDocOverlay();          ← ここから下は元のまま
-  let styleHtml = '';
   closeDocOverlay();
   let styleHtml = '';
   const styleMatches = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi);
