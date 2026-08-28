@@ -1102,6 +1102,9 @@ function switchApp(which){
        そこから「"ファイル"に保存」を選べるようにします。
      ・別ウィンドウでの印刷も iPhone では働かないので、
        画面の中に重ねて印刷できるようにします。
+     ・承諾書・契約書・請求書は、書類だけを入れた小窓(iframe)に移してから
+       印刷します。アプリ側の見た目が混ざらないので、A4横・A3横といった
+       用紙の指定や改ページがそのまま効き、きれいに出ます。
      ★パソコンと Android の動きは、これまでと一切変わりません。
      ★他のファイル(contracts.js など)は書き換えず、
        ここから横取りして差し替えています。
@@ -1152,6 +1155,21 @@ function switchApp(which){
 
   /* --- ③ iPhone でも印刷・PDF保存ができる画面を出す ---
      別ウィンドウを開かず、この画面の中に重ねて表示します。 */
+  /* A4横・A3横の書類はスマホの画面より広いので、
+     「画面で見るときだけ」横幅に合わせて縮めます。
+     印刷は @media screen で囲ってあるため原寸のままです。 */
+  function _fitToWidth(fr){
+    try{
+      var d = fr.contentDocument; if(!d || !d.body) return;
+      var need = Math.max(d.documentElement.scrollWidth, d.body.scrollWidth);
+      var have = fr.clientWidth;
+      if(!need || !have || need <= have + 2) return;
+      var st = d.createElement('style');
+      st.textContent = '@media screen{html{zoom:' + (have / need).toFixed(4) + ';}}';
+      (d.head || d.documentElement).appendChild(st);
+    }catch(e){}
+  }
+
   window.PV_PRINT_HTML = function(html){
     var old = document.getElementById('pv-print-ov');
     if(old && old.parentNode) old.parentNode.removeChild(old);
@@ -1190,9 +1208,46 @@ function switchApp(which){
     };
     close.onclick = function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); };
     go.onclick = doPrint;
-    fr.onload = function(){ setTimeout(doPrint, 400); };
+    // 書類じたいが「読み込めたら印刷する」を持っている場合は任せます(二重に出さない)
+    var self = /window\.print\s*\(/.test(String(html));
+    fr.onload = function(){
+      _fitToWidth(fr);
+      if(!self) setTimeout(doPrint, 400);
+    };
 
     if('srcdoc' in fr){ fr.srcdoc = html; }
     else{ var d = fr.contentWindow.document; d.open(); d.write(html); d.close(); }
   };
+
+  /* --- ④ 承諾書・契約書・請求書を、iPhone でもきれいに印刷する ---
+     いまは書類をアプリの画面の上に重ねて、そのまま印刷しています。
+     この方法だとアプリ側の見た目が混ざり、用紙の向き(A4横・A3横)や
+     改ページが崩れることがあります。
+     iPhone のときだけ、書類だけを入れた小窓に移してから印刷します。
+     ★パソコンは今までどおりです。 */
+  function _patchDocPrint(){
+    if(typeof window.printDocOverlay !== 'function') return;
+    if(window.printDocOverlay._pvPatched) return;
+    var _orig = window.printDocOverlay;
+    var f = function(){
+      var c = _isIOS ? document.getElementById('doc-ov-content') : null;
+      if(c && window.PV_PRINT_HTML){
+        // 書類の見た目(style)と中身を、そのまま小窓へ移します
+        window.PV_PRINT_HTML(
+          '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">' +
+          '<style>html,body{margin:0;padding:0;}</style></head><body>' +
+          c.innerHTML + '</body></html>');
+        return;
+      }
+      return _orig.apply(this, arguments);
+    };
+    f._pvPatched = 1;
+    window.printDocOverlay = f;
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _patchDocPrint);
+  }else{
+    _patchDocPrint();
+  }
+  window.addEventListener('load', _patchDocPrint);
 })();
