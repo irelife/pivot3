@@ -3855,3 +3855,47 @@ tr.sub-row td{font-size:13px;}
   .sw-date{ margin-left:0; }
   .sw-notice.sw-open .sw-list{ max-height:50vh; }
 }
+
+
+/* ============================================================
+   pv3-login-dark : PIVOT3 のログイン画面だけ、白黒を入れ替える
+     ・地を黒、文字を白にします（PIVOT2 と見分けやすくするため）
+     ・ログインボタンは黒→白に反転
+     ・入力欄も黒地・白文字に
+   ★このブロックは PIVOT3 だけに貼ってください。
+     PIVOT2 に貼ると、2 のログイン画面まで黒くなります。
+   消せば、いまの白いログイン画面に戻ります。
+   ============================================================ */
+#pivot-login{ background:#111114!important; }
+
+/* 上の細い帯・ロゴの丸・エリア名（OKAYAMA）を白に */
+#pivot-login div[style*="height:4px"]{ background:#ffffff!important; }
+#pivot-login div[style*="font-size:46px"]{ color:#ffffff!important; }
+#pivot-login div[style*="font-size:46px"] > span{ background:#ffffff!important; }
+#pivot-login div[style*="font-size:13px"]{ color:#9a9aa2!important; }
+#pivot-login div[style*="font-size:13px"] span[style*="font-weight:700"]{ color:#ffffff!important; }
+#pivot-login div[style*="font-size:13px"] span[style*="#ccc"]{ color:#55555c!important; }
+
+/* 入力欄 */
+#pivot-login #pivot-login-id,
+#pivot-login #pivot-login-pass{
+  background:#1d1d21!important;
+  color:#ffffff!important;
+  border:1.5px solid #3a3a42!important;
+}
+#pivot-login #pivot-login-id::placeholder,
+#pivot-login #pivot-login-pass::placeholder{ color:#7a7a82!important; }
+#pivot-login #pivot-login-id:focus,
+#pivot-login #pivot-login-pass:focus{
+  border-color:#ffffff!important; outline:none!important; box-shadow:none!important;
+}
+
+/* ログインボタン（黒→白） */
+#pivot-login #pivot-login-btn{
+  background:#ffffff!important;
+  color:#111114!important;
+}
+
+/* エラー文・「パスワードを忘れた方はこちら」 */
+#pivot-login #pivot-login-msg{ color:#9a9aa2!important; }
+#pivot-login #pivot-login-reset{ color:#8fb4ff!important; }
