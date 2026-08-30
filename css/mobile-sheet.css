@@ -109,14 +109,16 @@
   }
   #modal.pv-ms[data-pv-snap="full"] #pv-grip-name{ display:none; }
 
-  /* 本文はシートの中身。いちばん上まで上げたときだけスクロールします */
+  /* 本文はシートの中身。どの高さでも指でスクロールできます。
+     下や中の高さでスクロールしはじめたら、自動でいちばん上まで伸びます
+     （地図アプリと同じ動きです）。 */
   #modal.pv-ms > .modal #pv-sheet > .modal-body{
     flex:1 1 auto; min-height:0;
     padding:4px 14px 18px !important;
-    overflow-y:hidden !important; overscroll-behavior:contain;
+    overflow-y:auto !important; overscroll-behavior:contain;
     -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
   }
-  #modal.pv-ms[data-pv-snap="full"] #pv-sheet > .modal-body{ overflow-y:auto !important; }
 
   /* 保存・キャンセルはシートの下に固定 */
   #modal.pv-ms > .modal #pv-sheet > .modal-footer{
