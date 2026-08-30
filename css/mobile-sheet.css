@@ -156,4 +156,42 @@
   #modal.pv-ms .modal-body .tou-box,
   #modal.pv-ms .modal-body .spots-section,
   #modal.pv-ms .modal-body .img-section{ max-width:100% !important; }
+
+  /* ---- 区画を見るときに、配置図を上に貼りつけておく板 ----
+     シートをいちばん上まで上げたときだけ出ます。
+     中身をスクロールしても、この板は上に残ります。 */
+  #pv-pin{ display:none; }
+  #modal.pv-ms[data-pv-snap="full"] #pv-pin{
+    display:block; position:sticky; top:0; z-index:8;
+    margin:0 -14px 10px; background:#1C1D20;
+    border-bottom:1px solid #000; overflow:hidden;
+  }
+  #pv-pin .pv-pin-view{
+    height:30vh; min-height:150px; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; background:#1C1D20;
+  }
+  #pv-pin .pv-pin-view img{
+    width:100%; height:100%; object-fit:contain; touch-action:pan-y;
+    will-change:transform;
+  }
+  #pv-pin .pv-pin-bar{
+    position:absolute; top:6px; right:8px; left:8px; z-index:2;
+    display:flex; align-items:center; gap:6px; pointer-events:none;
+  }
+  #pv-pin .pv-pin-bar span{
+    font-size:10.5px; font-weight:700; letter-spacing:.06em; color:#C9CBCF;
+    background:rgba(0,0,0,.45); padding:3px 9px; border-radius:100px;
+  }
+  #pv-pin .pv-pin-bar button{
+    pointer-events:auto; margin-left:auto; appearance:none; border:0; cursor:pointer;
+    font-family:inherit; font-size:11.5px; font-weight:700;
+    background:rgba(255,255,255,.92); color:#17171A;
+    height:26px; padding:0 11px; border-radius:100px;
+  }
+  #pv-pin .pv-pin-bar button:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
+  /* たたんだとき */
+  #modal.pv-ms[data-pv-snap="full"] #pv-pin.is-folded .pv-pin-view{ height:0; min-height:0; }
+  #modal.pv-ms[data-pv-snap="full"] #pv-pin.is-folded{ background:#fff; border-bottom:1px solid #E4E4E6; }
+  #pv-pin.is-folded .pv-pin-bar{ position:static; padding:6px 2px; }
+  #pv-pin.is-folded .pv-pin-bar span{ color:#71717A; background:transparent; padding:0; }
 }
