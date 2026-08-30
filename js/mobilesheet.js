@@ -1,4 +1,140 @@
 /* ===========================================================
+   指でつまんで大きくする部品（ピンチ）
+
+   このアプリは画面全体のピンチを止めてあるので（index.html の
+   user-scalable=no）、必要なところだけ自前で動かします。
+
+   ・2本指でつまむ … 大きく／小さく（1〜6倍）
+   ・1本指でなぞる … 大きくしているときは、見る場所を動かす
+   ・2回たたく    … 2.5倍 ⇄ もとの大きさ
+
+   指で触れる端末だけで動きます。パソコンのマウス操作は
+   これまでどおりで、何も変わりません。
+   =========================================================== */
+(function(){
+  'use strict';
+  var TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  function pinchify(img, opts){
+    opts = opts || {};
+    if(!TOUCH || !img) return { reset:function(){}, enabled:false };
+
+    var MIN = 1, MAX = 6;
+    var pts = {}, n = 0, scale = 1, tx = 0, ty = 0;
+    var startScale = 1, startDist = 0, startMid = null, startTx = 0, startTy = 0;
+    var lastTap = 0, moved = 0;
+
+    function frame(){ return opts.frame || img.parentNode || img; }
+    function apply(){
+      clamp();
+      img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      /* 大きくしている間だけ、指の動きをこちらで受け取ります。
+         ふつうの大きさのときは、そのまま縦スクロールできるようにします。 */
+      if(opts.scrollable) img.style.touchAction = (scale > 1.02) ? 'none' : 'pan-y';
+    }
+    function clamp(){
+      if(scale < MIN) scale = MIN;
+      if(scale > MAX) scale = MAX;
+      if(scale <= 1){ tx = 0; ty = 0; return; }
+      var r = frame().getBoundingClientRect();
+      var w = img.clientWidth * scale, h = img.clientHeight * scale;
+      var mx = Math.max(0, (w - r.width)  / 2);
+      var my = Math.max(0, (h - r.height) / 2);
+      if(tx >  mx) tx =  mx;
+      if(tx < -mx) tx = -mx;
+      if(ty >  my) ty =  my;
+      if(ty < -my) ty = -my;
+    }
+    function reset(){
+      scale = 1; tx = 0; ty = 0; pts = {}; n = 0; startDist = 0;
+      img.style.transform = '';
+      if(opts.scrollable) img.style.touchAction = 'pan-y';
+    }
+    function list(){ var a = []; for(var k in pts) a.push(pts[k]); return a; }
+    function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+    function mid(a, b){ return { x:(a.x + b.x) / 2, y:(a.y + b.y) / 2 }; }
+
+    img.addEventListener('pointerdown', function(e){
+      pts[e.pointerId] = { x:e.clientX, y:e.clientY }; n++;
+      try{ img.setPointerCapture(e.pointerId); }catch(err){}
+      var p = list();
+      if(n === 2){
+        startDist = dist(p[0], p[1]); startMid = mid(p[0], p[1]);
+        startScale = scale; startTx = tx; startTy = ty;
+      } else if(n === 1){
+        moved = 0; startMid = { x:e.clientX, y:e.clientY }; startTx = tx; startTy = ty;
+      }
+    });
+    img.addEventListener('pointermove', function(e){
+      if(!pts[e.pointerId]) return;
+      pts[e.pointerId] = { x:e.clientX, y:e.clientY };
+      var p = list();
+      if(n >= 2 && startDist > 0){
+        if(e.cancelable) e.preventDefault();
+        var d = dist(p[0], p[1]), m = mid(p[0], p[1]);
+        scale = startScale * (d / startDist);
+        if(scale < MIN) scale = MIN;
+        if(scale > MAX) scale = MAX;
+        tx = startTx + (m.x - startMid.x);
+        ty = startTy + (m.y - startMid.y);
+        apply();
+      } else if(n === 1 && scale > 1.02){
+        if(e.cancelable) e.preventDefault();
+        var dx = e.clientX - startMid.x, dy = e.clientY - startMid.y;
+        moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
+        tx = startTx + dx; ty = startTy + dy;
+        apply();
+      }
+    });
+    function up(e){
+      if(pts[e.pointerId]){ delete pts[e.pointerId]; n = Math.max(0, n - 1); }
+      try{ img.releasePointerCapture(e.pointerId); }catch(err){}
+      if(n === 1){ var p = list()[0]; startMid = { x:p.x, y:p.y }; startTx = tx; startTy = ty; }
+      if(n === 0){
+        var now = Date.now();
+        if(moved < 8){
+          if(now - lastTap < 300){ scale = (scale > 1.05) ? 1 : 2.5; tx = 0; ty = 0; apply(); lastTap = 0; }
+          else lastTap = now;
+        }
+        startDist = 0;
+      }
+    }
+    img.addEventListener('pointerup', up);
+    img.addEventListener('pointercancel', up);
+
+    if(opts.scrollable) img.style.touchAction = 'pan-y';
+    else img.style.touchAction = 'none';
+
+    return {
+      reset: reset,
+      enabled: true,
+      zoomed: function(){ return scale > 1.05; }
+    };
+  }
+
+  window.PVPinch = pinchify;
+
+  /* ---- 配置図の拡大画面（黒い全画面）にも同じ動きを付けます ---- */
+  function startZoomPinch(){
+    var img = document.getElementById('img-zoom-target');
+    var box = document.getElementById('img-zoom');
+    if(!img || !box) return;
+    var pz = pinchify(img, { frame:box });
+    if(!pz.enabled) return;
+    box.addEventListener('click', function(e){
+      /* 大きくしている間は、画像から指を離しても閉じないようにします */
+      if(pz.zoomed() && e.target === img) e.stopPropagation();
+    }, true);
+    if(window.MutationObserver){
+      new MutationObserver(function(){ pz.reset(); })
+        .observe(box, { attributes:true, attributeFilter:['class'] });
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startZoomPinch);
+  else startZoomPinch();
+})();
+
+/* ===========================================================
    スマホで物件を見るときの画面（Googleマップと同じ組み立て）
 
    ・配置図を画面いっぱいに敷きます
@@ -18,6 +154,7 @@
 
   var on = false, idx = 1;
   var modal, box, header, body, footer, sheet, stage, grip, gripName, hint, obs;
+  var pin, pinImg, pinch;
 
   function q(s, r){ return (r || document).querySelector(s); }
 
@@ -51,6 +188,17 @@
     grip.innerHTML = '<i></i><b id="pv-grip-name"></b>';
     gripName = q('#pv-grip-name', grip);
 
+    /* 区画を見るときに、配置図を上に貼りつけておく板。
+       いちばん上まで上げたときだけ出ます（CSSで切り替え）。 */
+    pin = document.createElement('div');
+    pin.id = 'pv-pin';
+    pin.innerHTML =
+      '<div class="pv-pin-bar"><span>配置図</span>' +
+      '<button type="button" id="pv-pin-fold">たたむ</button></div>' +
+      '<div class="pv-pin-view"><img alt="配置図"></div>';
+    pinImg = pin.querySelector('img');
+    body.insertBefore(pin, body.firstChild);
+
     sheet.appendChild(grip);
     sheet.appendChild(body);
     if(footer) sheet.appendChild(footer);
@@ -76,6 +224,15 @@
        つまみを引き上げなくても読めるようにするためです（地図アプリと同じ）。 */
     body.addEventListener('scroll', onBodyScroll, { passive:true });
 
+    pin.querySelector('#pv-pin-fold').addEventListener('click', function(){
+      var folded = pin.classList.toggle('is-folded');
+      this.textContent = folded ? 'ひらく' : 'たたむ';
+      if(folded && pinch) pinch.reset();
+    });
+    if(typeof window.PVPinch === 'function'){
+      pinch = window.PVPinch(pinImg, { frame: pin.querySelector('.pv-pin-view'), scrollable: true });
+    }
+
     snap('half', false);
     syncStage();
     syncName();
@@ -93,6 +250,7 @@
 
     box.appendChild(body);
     if(footer) box.appendChild(footer);
+    if(pin && pin.parentNode) pin.parentNode.removeChild(pin);
     if(sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
     if(stage && stage.parentNode) stage.parentNode.removeChild(stage);
     if(hint  && hint.parentNode)  hint.parentNode.removeChild(hint);
@@ -101,7 +259,7 @@
     modal.removeAttribute('data-pv-snap');
     modal.style.removeProperty('--pv-h');
     body.style.removeProperty('overflow-y');
-    sheet = stage = grip = gripName = hint = null;
+    sheet = stage = grip = gripName = hint = pin = pinImg = pinch = null;
     on = false;
   }
 
@@ -117,6 +275,8 @@
       var cur = q('img', stage);
       if(cur){ if(cur.getAttribute('src') !== src) cur.setAttribute('src', src); }
       else { stage.innerHTML = '<img alt="配置図">'; q('img', stage).setAttribute('src', src); }
+      if(pinImg && pinImg.getAttribute('src') !== src) pinImg.setAttribute('src', src);
+      if(pin) pin.style.display = '';
       if(hint) hint.style.display = '';
       return;
     }
@@ -126,6 +286,7 @@
       stage.innerHTML = '<div class="pv-stage-none">配置図がまだ登録されていません。<br>下の「配置図」から追加できます。</div>';
     }
     if(hint) hint.style.display = 'none';
+    if(pin) pin.style.display = 'none';   // 配置図が無いときは板も出しません
   }
   function syncName(){
     if(!on || !gripName) return;
@@ -224,123 +385,4 @@
   else start();
 
   window.PVMobileSheet = { refresh: refresh, sync: function(){ syncStage(); syncName(); } };
-})();
-
-/* ===========================================================
-   配置図の拡大画面を、指でつまんで大きくできるようにします
-
-   このアプリは画面全体のピンチを止めてあるので（viewport の
-   user-scalable=no）、拡大画面の中だけ自前で動かします。
-
-   ・2本指でつまむ … 大きく／小さく（1〜6倍）
-   ・1本指でなぞる … 大きくしているときは、見る場所を動かす
-   ・2回たたく    … 2.5倍 ⇄ もとの大きさ
-   ・閉じて開き直すと、もとの大きさに戻ります
-
-   指で触れる端末だけで動きます。パソコンのマウス操作は
-   これまでどおりで、何も変わりません。
-   =========================================================== */
-(function(){
-  'use strict';
-  var TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  if(!TOUCH) return;
-
-  var MIN = 1, MAX = 6;
-  var img, box, pts = {}, n = 0;
-  var scale = 1, tx = 0, ty = 0;
-  var startScale = 1, startDist = 0, startMid = null, startTx = 0, startTy = 0;
-  var lastTap = 0, moved = 0;
-
-  function apply(){
-    if(!img) return;
-    clamp();
-    img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
-    img.style.cursor = (scale > 1) ? 'grab' : '';
-  }
-  function clamp(){
-    if(scale < MIN) scale = MIN;
-    if(scale > MAX) scale = MAX;
-    if(scale <= 1){ tx = 0; ty = 0; return; }
-    /* 画像が画面から完全に外へ出ないように、動かせる幅を決めます */
-    var w = img.clientWidth  * scale, h = img.clientHeight * scale;
-    var mx = Math.max(0, (w - window.innerWidth)  / 2);
-    var my = Math.max(0, (h - window.innerHeight) / 2);
-    if(tx >  mx) tx =  mx;
-    if(tx < -mx) tx = -mx;
-    if(ty >  my) ty =  my;
-    if(ty < -my) ty = -my;
-  }
-  function reset(){ scale = 1; tx = 0; ty = 0; if(img){ img.style.transform = ''; img.style.cursor = ''; } }
-
-  function list(){ var a = []; for(var k in pts) a.push(pts[k]); return a; }
-  function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
-  function mid(a, b){ return { x:(a.x + b.x) / 2, y:(a.y + b.y) / 2 }; }
-
-  function down(e){
-    pts[e.pointerId] = { x:e.clientX, y:e.clientY }; n++;
-    try{ img.setPointerCapture(e.pointerId); }catch(err){}
-    var p = list();
-    if(n === 2){
-      startDist = dist(p[0], p[1]); startMid = mid(p[0], p[1]);
-      startScale = scale; startTx = tx; startTy = ty;
-    } else if(n === 1){
-      moved = 0; startMid = { x:e.clientX, y:e.clientY }; startTx = tx; startTy = ty;
-    }
-  }
-  function move(e){
-    if(!pts[e.pointerId]) return;
-    pts[e.pointerId] = { x:e.clientX, y:e.clientY };
-    if(e.cancelable) e.preventDefault();
-    var p = list();
-    if(n >= 2 && startDist > 0){
-      var d = dist(p[0], p[1]), m = mid(p[0], p[1]);
-      scale = startScale * (d / startDist);
-      if(scale < MIN) scale = MIN;
-      if(scale > MAX) scale = MAX;
-      tx = startTx + (m.x - startMid.x);
-      ty = startTy + (m.y - startMid.y);
-      apply();
-    } else if(n === 1 && scale > 1){
-      var dx = e.clientX - startMid.x, dy = e.clientY - startMid.y;
-      moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
-      tx = startTx + dx; ty = startTy + dy;
-      apply();
-    }
-  }
-  function up(e){
-    if(pts[e.pointerId]){ delete pts[e.pointerId]; n = Math.max(0, n - 1); }
-    try{ img.releasePointerCapture(e.pointerId); }catch(err){}
-    if(n === 1){ var p = list()[0]; startMid = { x:p.x, y:p.y }; startTx = tx; startTy = ty; }
-    if(n === 0){
-      /* 2回たたいたら、2.5倍とふつうの大きさを行き来します */
-      var now = Date.now();
-      if(moved < 8){
-        if(now - lastTap < 300){ scale = (scale > 1.05) ? 1 : 2.5; tx = 0; ty = 0; apply(); lastTap = 0; }
-        else lastTap = now;
-      }
-      startDist = 0;
-    }
-  }
-
-  function start(){
-    img = document.getElementById('img-zoom-target');
-    box = document.getElementById('img-zoom');
-    if(!img || !box) return;
-    img.style.touchAction = 'none';
-    img.addEventListener('pointerdown', down);
-    img.addEventListener('pointermove', move);
-    img.addEventListener('pointerup', up);
-    img.addEventListener('pointercancel', up);
-    /* 大きくしている間は、画像から指を離しても画面が閉じないようにします */
-    box.addEventListener('click', function(e){
-      if(scale > 1.05 && e.target === img){ e.stopPropagation(); }
-    }, true);
-    /* 開き直したら、もとの大きさに戻します */
-    if(window.MutationObserver){
-      new MutationObserver(function(){ if(!box.classList.contains('active')) reset(); else reset(); })
-        .observe(box, { attributes:true, attributeFilter:['class'] });
-    }
-  }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
 })();
