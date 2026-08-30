@@ -72,6 +72,10 @@
     var nameEl = document.getElementById('f-name');
     if(nameEl) nameEl.addEventListener('input', syncName);
 
+    /* 中身をスクロールしはじめたら、シートをいちばん上まで伸ばします。
+       つまみを引き上げなくても読めるようにするためです（地図アプリと同じ）。 */
+    body.addEventListener('scroll', onBodyScroll, { passive:true });
+
     snap('half', false);
     syncStage();
     syncName();
@@ -85,6 +89,7 @@
     grip.removeEventListener('keydown', onKey);
     grip.removeEventListener('click', onTap);
     stage.removeEventListener('click', onStageTap);
+    body.removeEventListener('scroll', onBodyScroll);
 
     box.appendChild(body);
     if(footer) box.appendChild(footer);
@@ -182,6 +187,12 @@
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); snap(SNAPS[(idx + 1) % SNAPS.length]); }
   }
 
+  /* ---------- 中身をスクロールしたら、いちばん上まで伸ばします ---------- */
+  function onBodyScroll(){
+    if(!on || dragging) return;
+    if(body.scrollTop > 6 && SNAPS[idx] !== 'full') snap('full');
+  }
+
   /* ---------- 配置図をタップして拡大（いまある機能をそのまま使います） ---------- */
   function onStageTap(){
     var src = layoutSrc();
@@ -213,4 +224,123 @@
   else start();
 
   window.PVMobileSheet = { refresh: refresh, sync: function(){ syncStage(); syncName(); } };
+})();
+
+/* ===========================================================
+   配置図の拡大画面を、指でつまんで大きくできるようにします
+
+   このアプリは画面全体のピンチを止めてあるので（viewport の
+   user-scalable=no）、拡大画面の中だけ自前で動かします。
+
+   ・2本指でつまむ … 大きく／小さく（1〜6倍）
+   ・1本指でなぞる … 大きくしているときは、見る場所を動かす
+   ・2回たたく    … 2.5倍 ⇄ もとの大きさ
+   ・閉じて開き直すと、もとの大きさに戻ります
+
+   指で触れる端末だけで動きます。パソコンのマウス操作は
+   これまでどおりで、何も変わりません。
+   =========================================================== */
+(function(){
+  'use strict';
+  var TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if(!TOUCH) return;
+
+  var MIN = 1, MAX = 6;
+  var img, box, pts = {}, n = 0;
+  var scale = 1, tx = 0, ty = 0;
+  var startScale = 1, startDist = 0, startMid = null, startTx = 0, startTy = 0;
+  var lastTap = 0, moved = 0;
+
+  function apply(){
+    if(!img) return;
+    clamp();
+    img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+    img.style.cursor = (scale > 1) ? 'grab' : '';
+  }
+  function clamp(){
+    if(scale < MIN) scale = MIN;
+    if(scale > MAX) scale = MAX;
+    if(scale <= 1){ tx = 0; ty = 0; return; }
+    /* 画像が画面から完全に外へ出ないように、動かせる幅を決めます */
+    var w = img.clientWidth  * scale, h = img.clientHeight * scale;
+    var mx = Math.max(0, (w - window.innerWidth)  / 2);
+    var my = Math.max(0, (h - window.innerHeight) / 2);
+    if(tx >  mx) tx =  mx;
+    if(tx < -mx) tx = -mx;
+    if(ty >  my) ty =  my;
+    if(ty < -my) ty = -my;
+  }
+  function reset(){ scale = 1; tx = 0; ty = 0; if(img){ img.style.transform = ''; img.style.cursor = ''; } }
+
+  function list(){ var a = []; for(var k in pts) a.push(pts[k]); return a; }
+  function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+  function mid(a, b){ return { x:(a.x + b.x) / 2, y:(a.y + b.y) / 2 }; }
+
+  function down(e){
+    pts[e.pointerId] = { x:e.clientX, y:e.clientY }; n++;
+    try{ img.setPointerCapture(e.pointerId); }catch(err){}
+    var p = list();
+    if(n === 2){
+      startDist = dist(p[0], p[1]); startMid = mid(p[0], p[1]);
+      startScale = scale; startTx = tx; startTy = ty;
+    } else if(n === 1){
+      moved = 0; startMid = { x:e.clientX, y:e.clientY }; startTx = tx; startTy = ty;
+    }
+  }
+  function move(e){
+    if(!pts[e.pointerId]) return;
+    pts[e.pointerId] = { x:e.clientX, y:e.clientY };
+    if(e.cancelable) e.preventDefault();
+    var p = list();
+    if(n >= 2 && startDist > 0){
+      var d = dist(p[0], p[1]), m = mid(p[0], p[1]);
+      scale = startScale * (d / startDist);
+      if(scale < MIN) scale = MIN;
+      if(scale > MAX) scale = MAX;
+      tx = startTx + (m.x - startMid.x);
+      ty = startTy + (m.y - startMid.y);
+      apply();
+    } else if(n === 1 && scale > 1){
+      var dx = e.clientX - startMid.x, dy = e.clientY - startMid.y;
+      moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
+      tx = startTx + dx; ty = startTy + dy;
+      apply();
+    }
+  }
+  function up(e){
+    if(pts[e.pointerId]){ delete pts[e.pointerId]; n = Math.max(0, n - 1); }
+    try{ img.releasePointerCapture(e.pointerId); }catch(err){}
+    if(n === 1){ var p = list()[0]; startMid = { x:p.x, y:p.y }; startTx = tx; startTy = ty; }
+    if(n === 0){
+      /* 2回たたいたら、2.5倍とふつうの大きさを行き来します */
+      var now = Date.now();
+      if(moved < 8){
+        if(now - lastTap < 300){ scale = (scale > 1.05) ? 1 : 2.5; tx = 0; ty = 0; apply(); lastTap = 0; }
+        else lastTap = now;
+      }
+      startDist = 0;
+    }
+  }
+
+  function start(){
+    img = document.getElementById('img-zoom-target');
+    box = document.getElementById('img-zoom');
+    if(!img || !box) return;
+    img.style.touchAction = 'none';
+    img.addEventListener('pointerdown', down);
+    img.addEventListener('pointermove', move);
+    img.addEventListener('pointerup', up);
+    img.addEventListener('pointercancel', up);
+    /* 大きくしている間は、画像から指を離しても画面が閉じないようにします */
+    box.addEventListener('click', function(e){
+      if(scale > 1.05 && e.target === img){ e.stopPropagation(); }
+    }, true);
+    /* 開き直したら、もとの大きさに戻します */
+    if(window.MutationObserver){
+      new MutationObserver(function(){ if(!box.classList.contains('active')) reset(); else reset(); })
+        .observe(box, { attributes:true, attributeFilter:['class'] });
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })();
