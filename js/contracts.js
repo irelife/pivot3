@@ -1559,7 +1559,34 @@ function computeBrokerStats(){
   return { rows, fyValid, fy, total, totalCancel, totalReject, totalBase, cancelRate, rejectRate, years, monthsAll, props, staffs };
 }
 let _brokerStatMode = 'broker'; // 'broker' | 'property' | 'staff'
-function setBrokerStatMode(m){ _brokerStatMode = m; renderBrokerStats(); }
+function setBrokerStatMode(m){
+  if(_brokerStatMode === m) return;
+  _brokerStatMode = m;
+  /* ★押した瞬間に、まずタブの色だけ先に変えます。
+     一覧の作り直しは、画面が一度更新されてからに回します。
+     これで「押しても何も起きない」時間がなくなります。 */
+  const _body = document.getElementById('bstat-body');
+  try{
+    document.querySelectorAll('.bstat-mode .bmode').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-bmode') === m);
+    });
+  }catch(e){}
+  if(_body) _body.style.opacity = '0.45';
+  /* 30ms（画面2コマ分）だけ待ってから作り直します。
+     この間に、押したタブの色が先に画面へ出ます。
+     ※ requestAnimationFrame は画面が止まっているときに動かないことが
+       あるので、確実に動く setTimeout にしています。 */
+  setTimeout(function(){
+    try{ renderBrokerStats(); } finally { if(_body) _body.style.opacity = ''; }
+  }, 30);
+}
+/* 年の欄は1文字打つごとに作り直していました（「2026」で 4回）。
+   手が止まってから 1回だけにします。 */
+let _bstatYearTimer = null;
+function renderBrokerStatsSoon(){
+  if(_bstatYearTimer) clearTimeout(_bstatYearTimer);
+  _bstatYearTimer = setTimeout(function(){ _bstatYearTimer = null; renderBrokerStats(); }, 300);
+}
 /* PDFの中にしか無かった ①TOP20 ②掘り起こし候補 を、画面にも出す。
    計算の考え方は exportBrokerStatsPdf と同じ（最終客付けからの経過月数）。 */
 function brokerInsightHtml(rows){
@@ -1629,6 +1656,27 @@ function brokerInsightHtml(rows){
     + '</div>';
 }
  
+/* ===== 業者カードの明細を、開いたときに作る仕組み ===== */
+let _bcardItems = {};
+function _brokerPropsHtml(items){
+  return (items||[]).map(it =>
+    '<div class="bstat-prop-row' + (it.cancel ? ' is-cancel' : '') + '">' +
+      '<span class="pdot">' + (it.kind === 'reject' ? '📕' : (it.cancel ? '🚫' : '●')) + '</span>' +
+      '<span class="pname">' + esc(it.property) + (it.kind === 'reject' ? ' <span class="cxtag rjtag">審査落ち</span>' : (it.cancel ? ' <span class="cxtag">ｷｬﾝｾﾙ</span>' : '')) + '</span>' +
+      (it.staff ? '<span class="pstaff">' + esc(it.staff) + '</span>' : '') +
+      '<span class="pwhen">' + esc(it.when) + '</span>' +
+    '</div>'
+  ).join('');
+}
+function _fillBrokerProps(card, i){
+  if(!card) return null;
+  const box = card.querySelector('.bstat-props');
+  if(box && box.getAttribute('data-lazy') === '1'){
+    box.innerHTML = _brokerPropsHtml(_bcardItems[i]);
+    box.removeAttribute('data-lazy');
+  }
+  return box;
+}
 function renderBrokerStats(){
   const { rows, fyValid, fy, total, totalCancel, totalReject, totalBase, cancelRate, rejectRate, years, monthsAll, props: propRanking, staffs: staffRanking } = computeBrokerStats();
   const _now = new Date();
@@ -1643,9 +1691,9 @@ function renderBrokerStats(){
   }
   const period = fyValid ? (fy + '年') : '全期間(2023〜)';
   const modeTabs = '<div class="bstat-mode">' +
-    '<button class="bmode'+(_brokerStatMode==='broker'?' on':'')+'" onclick="KB.setBrokerStatMode(\'broker\')">業者別</button>' +
-    '<button class="bmode'+(_brokerStatMode==='property'?' on':'')+'" onclick="KB.setBrokerStatMode(\'property\')">物件別</button>' +
-    '<button class="bmode'+(_brokerStatMode==='staff'?' on':'')+'" onclick="KB.setBrokerStatMode(\'staff\')">担当者別</button>' +
+    '<button class="bmode'+(_brokerStatMode==='broker'?' on':'')+'" data-bmode="broker" onclick="KB.setBrokerStatMode(\'broker\')">業者別</button>' +
+    '<button class="bmode'+(_brokerStatMode==='property'?' on':'')+'" data-bmode="property" onclick="KB.setBrokerStatMode(\'property\')">物件別</button>' +
+    '<button class="bmode'+(_brokerStatMode==='staff'?' on':'')+'" data-bmode="staff" onclick="KB.setBrokerStatMode(\'staff\')">担当者別</button>' +
     '</div>';
   // 集計は、契約画面の黒い件数バーと同じ見た目にそろえる（モノクロ・絵文字なし）
   let html = modeTabs + '<div class="stats-bar bstat-bar">' +
@@ -1793,17 +1841,15 @@ function renderBrokerStats(){
     html += '</div>';
   }
  
+  _bcardItems = {};
   rows.forEach((r, i) => {
     const rankCls = i < 3 ? ' rk' + (i+1) : '';
     const medal = (i+1);
-    const props = r.items.map(it =>
-      '<div class="bstat-prop-row' + (it.cancel ? ' is-cancel' : '') + '">' +
-        '<span class="pdot">' + (it.kind === 'reject' ? '📕' : (it.cancel ? '🚫' : '●')) + '</span>' +
-        '<span class="pname">' + esc(it.property) + (it.kind === 'reject' ? ' <span class="cxtag rjtag">審査落ち</span>' : (it.cancel ? ' <span class="cxtag">ｷｬﾝｾﾙ</span>' : '')) + '</span>' +
-        (it.staff ? '<span class="pstaff">' + esc(it.staff) + '</span>' : '') +
-        '<span class="pwhen">' + esc(it.when) + '</span>' +
-      '</div>'
-    ).join('');
+    /* ★明細（客付けの一覧）は、カードを開くまで作りません。
+       401社ぶんを先に作ると、目に見えない部品が 24,000個 できてしまい、
+       タブを押したときの反応が遅くなっていました。
+       開いたときに _fillBrokerProps() が作ります。 */
+    _bcardItems[i] = r.items;
     // 月別グラフ（成約のみ・時系列。件数が2以上の業者に表示）
     let monthChart = '';
     const mkeys = Object.keys(r.months).sort();
@@ -1843,14 +1889,22 @@ function renderBrokerStats(){
       '<div class="bstat-rate">申込 <b>' + r.base + '</b> 件　／　キャンセル率 <b class="rt-cx">' + r.cancelRate + '</b>　／　審査落ち率 <b class="rt-rj">' + r.rejectRate + '</b></div>' +
       top3html +
       monthChart +
-      '<div class="bstat-props bstat-collapsed">' + props + '</div>' +
+      '<div class="bstat-props bstat-collapsed" data-lazy="1"></div>' +
     '</div>';
   });
   body.innerHTML = html;
   _attachBmTips();
 }
 // 月グラフの棒ホバーで物件一覧ツールチップを表示
+/* ★以前は、棒 1本ずつに合図を 3つ付けていました。
+   棒は 2,500本 あるので、タブを押すたびに 7,600個 付け直していました。
+   いまは #bstat-body に 1組だけ付けて、押された棒を見に行きます。
+   見た目も動きもこれまでと同じです。 */
+let _bmTipBound = false;
 function _attachBmTips(){
+  const host = document.getElementById('bstat-body');
+  if(!host || _bmTipBound) return;
+  _bmTipBound = true;
   let tip = document.getElementById('bm-floating-tip');
   if(!tip){
     tip = document.createElement('div');
@@ -1858,25 +1912,34 @@ function _attachBmTips(){
     tip.style.cssText = 'position:fixed;z-index:99999;display:none;max-width:320px;background:#1c1c1e;color:#fff;font-size:12px;line-height:1.6;padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none;';
     document.body.appendChild(tip);
   }
-  const cols = document.querySelectorAll('#bstat-body .mbar-col[data-tip-ym]');
-  cols.forEach(col => {
-    const show = () => {
-      const ym = col.dataset.tipYm, cnt = col.dataset.tipCnt, props = col.dataset.tipProps || '';
-      const list = props ? props.split(' / ').map(p=>'・'+p).join('<br>') : '(物件名なし)';
-      tip.innerHTML = '<div style="font-weight:800;margin-bottom:5px;color:#7dd3fc">'+ym+'　'+cnt+'件</div>'+list;
-      tip.style.display = 'block';
-      const r = col.getBoundingClientRect();
-      let x = r.left + r.width/2 - tip.offsetWidth/2;
-      let y = r.top - tip.offsetHeight - 8;
-      x = Math.max(8, Math.min(x, window.innerWidth - tip.offsetWidth - 8));
-      if(y < 8) y = r.bottom + 8;
-      tip.style.left = x + 'px';
-      tip.style.top = y + 'px';
-    };
-    const hide = () => { tip.style.display = 'none'; };
-    col.addEventListener('mouseenter', show);
-    col.addEventListener('mouseleave', hide);
-    col.addEventListener('click', (e)=>{ e.stopPropagation(); show(); setTimeout(hide, 3500); }); // タップでも一時表示
+  let hideTimer = null;
+  const pick = (e) => {
+    const t = e.target;
+    return (t && t.closest) ? t.closest('.mbar-col[data-tip-ym]') : null;
+  };
+  const show = (col) => {
+    const ym = col.dataset.tipYm, cnt = col.dataset.tipCnt, props = col.dataset.tipProps || '';
+    const list = props ? props.split(' / ').map(p=>'・'+p).join('<br>') : '(物件名なし)';
+    tip.innerHTML = '<div style="font-weight:800;margin-bottom:5px;color:#7dd3fc">'+ym+'　'+cnt+'件</div>'+list;
+    tip.style.display = 'block';
+    const r = col.getBoundingClientRect();
+    let x = r.left + r.width/2 - tip.offsetWidth/2;
+    let y = r.top - tip.offsetHeight - 8;
+    x = Math.max(8, Math.min(x, window.innerWidth - tip.offsetWidth - 8));
+    if(y < 8) y = r.bottom + 8;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  };
+  const hide = () => { tip.style.display = 'none'; };
+  host.addEventListener('mouseover', (e) => { const c = pick(e); if(c) show(c); });
+  host.addEventListener('mouseout',  (e) => { if(pick(e)) hide(); });
+  host.addEventListener('click', (e) => {
+    const c = pick(e);
+    if(!c) return;
+    e.stopPropagation();
+    show(c);
+    if(hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, 3500);   // タップでも一時表示
   });
 }
 function filterBrokerYear(y){
@@ -1905,7 +1968,7 @@ function toggleStaffCard(i){
 function toggleBrokerCard(i){
   const card = document.querySelector('[data-bcard="'+i+'"]');
   if(!card) return;
-  const props = card.querySelector('.bstat-props');
+  const props = _fillBrokerProps(card, i);
   const caret = card.querySelector('.bstat-caret');
   // キャンセル絞り込みが効いていたら解除して全件表示に戻す
   if(props){ props.classList.remove('cx-only'); }
@@ -1916,7 +1979,7 @@ function toggleBrokerCard(i){
 function showBrokerCancels(i){
   const card = document.querySelector('[data-bcard="'+i+'"]');
   if(!card) return;
-  const props = card.querySelector('.bstat-props');
+  const props = _fillBrokerProps(card, i);
   const caret = card.querySelector('.bstat-caret');
   if(props){
     props.classList.remove('bstat-collapsed');   // 開く
@@ -1926,7 +1989,27 @@ function showBrokerCancels(i){
   // その位置までスクロール
   try{ card.scrollIntoView({behavior:'smooth', block:'nearest'}); }catch(e){}
 }
-function exportBrokerStatsCsv(){
+/* ===== CSV／PDF のボタンに、押した合図を出します ==========================
+   どちらも 4,600件を数え直してから作るので、少し時間がかかります。
+   これまでは押しても見た目が変わらず、効いていないように見えていました。
+   押した瞬間にボタンの字を変え、作り終わったら元に戻します。
+   二重に押しても、1回しか走りません。
+   ======================================================================== */
+function _bstatBusy(id, label, run){
+  const b = document.getElementById(id);
+  if(b && b.dataset.busy) return;              // 連打よけ
+  const keep = b ? b.textContent : '';
+  if(b){ b.dataset.busy = '1'; b.textContent = label; b.style.opacity = '0.6'; }
+  setTimeout(function(){
+    try{ run(); }
+    finally{
+      if(b){ delete b.dataset.busy; b.textContent = keep; b.style.opacity = ''; }
+    }
+  }, 30);
+}
+function exportBrokerStatsCsv(){ _bstatBusy('bstat-csv', '作成中…', _doExportBrokerStatsCsv); }
+function exportBrokerStatsPdf(){ _bstatBusy('bstat-pdf', '作成中…', _doExportBrokerStatsPdf); }
+function _doExportBrokerStatsCsv(){
   const { rows, fyValid, fy } = computeBrokerStats();
   if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
  
@@ -1975,7 +2058,7 @@ function exportBrokerStatsCsv(){
 }
 // 社長向けPDF資料を出力（印刷ダイアログ方式）。
 // ①ランキングTOP20 ＋ ②掘り起こし候補 ＋ ③担当者ランキング（会社名つき）
-function exportBrokerStatsPdf(){
+function _doExportBrokerStatsPdf(){
   const { rows, fyValid, fy, staffs } = computeBrokerStats();
   if(rows.length === 0){ alert('出力できる統計データがありません。'); return; }
   const esc = (s)=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -3780,6 +3863,7 @@ try{window.KB.openDoneModal=openDoneModal;}catch(e){}
 try{window.KB.openBrokerStats=openBrokerStats;}catch(e){}
 try{window.KB.closeBrokerStats=closeBrokerStats;}catch(e){}
 try{window.KB.renderBrokerStats=renderBrokerStats;}catch(e){}
+try{window.KB.renderBrokerStatsSoon=renderBrokerStatsSoon;}catch(e){}
 try{window.KB.exportBrokerStatsCsv=exportBrokerStatsCsv;}catch(e){}
 try{window.KB.exportBrokerStatsPdf=exportBrokerStatsPdf;}catch(e){}
 try{window.KB.filterBrokerYear=filterBrokerYear;}catch(e){}
