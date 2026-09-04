@@ -482,3 +482,339 @@
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addUndoButton);
   else addUndoButton();
 })();
+
+/* ============================================================
+ *  ㉚ 送るときも、受けるときも、データが減らないようにします（合体方式）
+ *
+ *  これまでの安全装置は「止めるだけ」でした。
+ *  止めたあと何をすればよいのか分からない、という問題があったので、
+ *  ここでは【OK】を押すだけで直るようにしています。
+ *
+ *  考え方はひとつだけです。
+ *    「片方にしか無いものは、消さずに足す」
+ *
+ *  ・受けるとき（クラウド → この端末）
+ *      届いた内容に、この端末にしか無い分を足してから取り込みます。
+ *      そのあと自動でクラウドへ送り直すので、ほかの端末もそろいます。
+ *  ・送るとき（この端末 → クラウド）
+ *      この端末の内容に、クラウドにしか無い分を足してから送ります。
+ *
+ *  どちらも、物件・区画・配置図・契約・オーナーを見ています。
+ *  もとの安全装置（js/core.js）は物件の「件数」しか見ていないため、
+ *  物件67件のまま区画や配置図だけ古い、というデータは素通りしていました。
+ *
+ *  ※ わざと消した物件が、ほかの端末から戻ってくることがあります。
+ *     そのときはもう一度消してください（そのほうが、消える事故より安全です）。
+ *     ただし「この端末で消したと記録が残っている物件」は戻しません。
+ * ============================================================ */
+(function(){
+  'use strict';
+
+  function pfx(){ return (typeof insPrefix === 'function') ? insPrefix() : 'pivot_'; }
+  function bKey(){ return (typeof pbKey === 'function') ? pbKey() : pfx() + 'blds'; }
+  function cKey(){ return (typeof ctKey === 'function') ? ctKey() : pfx() + 'contract_kanban_v2'; }
+  function oKey(){ return pfx() + 'rent_owner_send_owners_v1'; }
+  function preKey(){ return pfx() + 'prerestore_backup'; }
+
+  function pj(s, d){ try{ return JSON.parse(s || d); }catch(e){ return JSON.parse(d); } }
+  function obj(s){ return pj(s, '{}'); }
+  function arr(s){ var v = pj(s, '[]'); return Array.isArray(v) ? v : []; }
+
+  /* -------- 数えかた（物件／区画／配置図） -------- */
+  function tally(blds){
+    var t = { bld:0, spot:0, layout:0 };
+    Object.keys(blds || {}).forEach(function(id){
+      var b = blds[id]; if(!b) return;
+      t.bld++;
+      t.spot += (b.spots || []).length;
+      if(b.layout_id) t.layout++;
+      if(b.layout2_id) t.layout++;
+    });
+    return t;
+  }
+
+  /* 区画の見分け方: 棟 + 区画番号 */
+  function spotKey(s){
+    if(!s) return '';
+    return String(s.tou || '') + '|' + String(s.no != null ? s.no : '');
+  }
+
+  /* この端末で「わざと消した」と分かる物件IDの一覧 */
+  function knownIds(){
+    try{
+      if(typeof window.loadSyncIds === 'function'){
+        var v = window.loadSyncIds();
+        return Array.isArray(v) ? v : [];
+      }
+    }catch(e){}
+    return [];
+  }
+
+  /* -------------------------------------------------------
+   *  base を土台に、other にしか無いものを足して返します。
+   *  base の中身は書き換えません（消えるものを補うだけ）。
+   *  戻り値: { blds, add:{bld,spot,layout}, names:[物件名…] }
+   * ------------------------------------------------------- */
+  function mergeBlds(base, other, respectDeleted){
+    var out = {}, add = { bld:0, spot:0, layout:0 }, names = [];
+    var known = respectDeleted ? knownIds() : [];
+    base  = base  || {};
+    other = other || {};
+
+    Object.keys(base).forEach(function(id){ out[id] = base[id]; });
+
+    Object.keys(other).forEach(function(id){
+      var o = other[id]; if(!o) return;
+
+      /* 土台に無い物件 */
+      if(!Object.prototype.hasOwnProperty.call(out, id)){
+        if(respectDeleted && known.indexOf(id) >= 0) return;   // ここで消したもの → 戻さない
+        out[id] = o;
+        add.bld++;
+        add.spot += (o.spots || []).length;
+        if(o.layout_id)  add.layout++;
+        if(o.layout2_id) add.layout++;
+        names.push(String(o.name || id));
+        return;
+      }
+
+      /* 両方にある物件 → 足りない区画と配置図だけ補う */
+      var b = out[id];
+      var bs = (b && b.spots) ? b.spots : [];
+      var os = (o && o.spots) ? o.spots : [];
+      var have = {}, miss = [];
+      bs.forEach(function(s){ have[spotKey(s)] = 1; });
+      os.forEach(function(s){ if(!have[spotKey(s)]){ miss.push(s); have[spotKey(s)] = 1; } });
+
+      var needLayout  = (!b.layout_id  && o.layout_id);
+      var needLayout2 = (!b.layout2_id && o.layout2_id);
+      if(!miss.length && !needLayout && !needLayout2) return;
+
+      var nb = {};
+      Object.keys(b).forEach(function(k){ nb[k] = b[k]; });
+      if(miss.length){ nb.spots = bs.concat(miss); add.spot += miss.length; }
+      if(needLayout){  nb.layout_id  = o.layout_id;  add.layout++; }
+      if(needLayout2){ nb.layout2_id = o.layout2_id; add.layout++; }
+      /* 画像の種類（mime）も、足した分だけ引き継ぎます */
+      if((needLayout || needLayout2) && o.mime){
+        var m = {};
+        Object.keys(nb.mime || {}).forEach(function(k){ m[k] = nb.mime[k]; });
+        Object.keys(o.mime).forEach(function(k){ if(m[k] == null) m[k] = o.mime[k]; });
+        nb.mime = m;
+      }
+      out[id] = nb;
+      if(names.indexOf(String(b.name || id)) < 0) names.push(String(b.name || id));
+    });
+
+    return { blds: out, add: add, names: names };
+  }
+
+  /* 契約（IDのかたまり）: 土台に無いものだけ足します */
+  function mergeMap(base, other){
+    var out = {}, n = 0;
+    Object.keys(base || {}).forEach(function(k){ out[k] = base[k]; });
+    Object.keys(other || {}).forEach(function(k){
+      if(!Object.prototype.hasOwnProperty.call(out, k)){ out[k] = other[k]; n++; }
+    });
+    return { map: out, add: n };
+  }
+
+  /* オーナー（並び）: 名前で見て、土台に無いものだけ足します */
+  function mergeOwners(base, other){
+    var out = (base || []).slice(), n = 0, seen = {};
+    out.forEach(function(o){ seen[String((o && (o.id || o.name)) || '')] = 1; });
+    (other || []).forEach(function(o){
+      var k = String((o && (o.id || o.name)) || '');
+      if(!k || seen[k]) return;
+      out.push(o); seen[k] = 1; n++;
+    });
+    return { list: out, add: n };
+  }
+
+  function nameList(names){
+    if(!names.length) return '';
+    return '　　' + names.slice(0, 8).join('、') + (names.length > 8 ? ('　ほか' + (names.length - 8) + '件') : '') + '\n';
+  }
+  function addLines(add){
+    var s = '';
+    if(add.bld)    s += '　物件　： ' + add.bld + '件\n';
+    if(add.spot)   s += '　区画　： ' + add.spot + '\n';
+    if(add.layout) s += '　配置図： ' + add.layout + '\n';
+    return s;
+  }
+
+  /* 上書きされる前の状態を退避します（設定 →「復元前に戻す」で戻せます）*/
+  function keepBefore(){
+    try{
+      localStorage.setItem(preKey(), JSON.stringify({
+        at: new Date().toISOString(),
+        buildings: localStorage.getItem(bKey()) || '{}',
+        contracts: localStorage.getItem(cKey()) || '{}',
+        owners: localStorage.getItem(oKey()) || '[]'
+      }));
+    }catch(e){}
+  }
+
+  /* ==========================================================
+   *  受けるとき: クラウド → この端末
+   * ========================================================== */
+  var ORIG_SAVE = window.pbSaveRaw;
+  function writeThrough(o){
+    if(typeof ORIG_SAVE === 'function') return ORIG_SAVE(o);
+    try{ localStorage.setItem(bKey(), JSON.stringify(o || {})); }catch(e){}
+  }
+
+  /* クラウドから読んだ中身の控え。
+     この控えと同じものが書き込まれるときだけ「取り込み」と判断します。
+     （エリア一括削除など、この端末の操作は止めません） */
+  var _cloudSig = null;
+  var _hookedPost = false;
+
+  window.pbSaveRaw = function(incoming){
+    var mine, m;
+    /* 取り込みでなければ、そのまま保存します */
+    if(_hookedPost){
+      var sig = null;
+      try{ sig = JSON.stringify(incoming || {}); }catch(e){ sig = null; }
+      if(sig === null || sig !== _cloudSig) return writeThrough(incoming);
+    }
+    try{
+      mine = obj(localStorage.getItem(bKey()));
+      /* 届いた内容を土台に、この端末にしか無い分を足します */
+      m = mergeBlds(incoming || {}, mine, true);
+    }catch(e){ return writeThrough(incoming); }
+
+    /* 手元が空（初回）／減るものが無い → そのまま取り込みます */
+    if(!Object.keys(mine).length || (!m.add.bld && !m.add.spot && !m.add.layout)){
+      return writeThrough(incoming);
+    }
+
+    var now = tally(mine), inc = tally(incoming || {});
+    var msg = '⚠️ クラウドから届いたデータのほうが少ないです。\n\n' +
+              '【この端末にあって、クラウドに無いもの】\n' +
+              addLines(m.add) + nameList(m.names) +
+              '\n（いまの端末： 物件' + now.bld + '／区画' + now.spot + '／配置図' + now.layout + '）\n' +
+              '（届いた内容： 物件' + inc.bld + '／区画' + inc.spot + '／配置図' + inc.layout + '）\n\n' +
+              '【OK】どちらも残して取り込みます（おすすめ）\n' +
+              '　　　届いた内容に、上の分を足します。何も消えません。\n' +
+              '　　　そのあとクラウドへ送り直し、ほかの端末もそろえます。\n\n' +
+              '【キャンセル】取り込みません（この端末のまま）';
+
+    var doMerge = true;
+    try{ doMerge = window.confirm(msg); }catch(e){ doMerge = true; }
+
+    if(!doMerge){
+      try{ if(typeof setSyncStatus === 'function') setSyncStatus('error', '⚠️ 取り込みを止めました（この端末のまま）'); }catch(e){}
+      return;
+    }
+
+    keepBefore();
+    writeThrough(m.blds);
+    try{ if(typeof setSyncStatus === 'function') setSyncStatus('saved', '✅ 両方を残して取り込みました'); }catch(e){}
+    /* クラウドにも足した内容を送り直して、全部の端末をそろえます */
+    try{ if(typeof window.__scheduleAutoPush === 'function') window.__scheduleAutoPush(); }catch(e){}
+  };
+
+  /* ==========================================================
+   *  送るとき: この端末 → クラウド
+   *  postToGas の action:'save' を横取りして、
+   *  送る中身にクラウドの分を足してから送ります。
+   * ========================================================== */
+  var ORIG_POST = window.postToGas;
+  if(typeof ORIG_POST === 'function'){
+    var _cloud = null, _cloudAt = 0;
+    _hookedPost = true;
+
+    /* もとの安全装置（js/core.js の pvMissingFromLocal）は
+       「消える物件があります」と出して送信を止めるだけでした。
+       ここでは足してから送るので、止める必要がありません。
+       止められると直せなくなるので、こちらに任せてもらいます。 */
+    try{ window.pvMissingFromLocal = function(){ return []; }; }catch(e){}
+
+    window.postToGas = function(url, body, timeoutMs){
+      /* 送信でなければ素通り。ただし読み込みの結果は覚えておきます */
+      if(!body || body.action !== 'save'){
+        var p = ORIG_POST(url, body, timeoutMs);
+        try{
+          return Promise.resolve(p).then(function(r){
+            if(body && body.action === 'load' && r && r.ok && r.payload){
+              _cloud = r.payload; _cloudAt = Date.now();
+              try{ _cloudSig = JSON.stringify(r.payload.buildings || {}); }catch(e){ _cloudSig = null; }
+            }
+            return r;
+          });
+        }catch(e){ return p; }
+      }
+
+      /* ここから送信 */
+      return (function(){
+        var fresh = (_cloud && (Date.now() - _cloudAt) < 20000)
+          ? Promise.resolve({ ok:true, payload:_cloud })
+          : Promise.resolve(ORIG_POST(url, { action:'load' }, timeoutMs)).catch(function(){ return null; });
+
+        return fresh.then(function(r){
+          if(!r || !r.ok || !r.payload) return ORIG_POST(url, body, timeoutMs);   /* 確認できなければ通常どおり */
+          var cloud = r.payload;
+          _cloud = cloud; _cloudAt = Date.now();
+          try{ _cloudSig = JSON.stringify(cloud.buildings || {}); }catch(e){ _cloudSig = null; }
+
+          var pay = body.payload || {};
+          var mB, mC, mO;
+          try{
+            mB = mergeBlds(pay.buildings || {}, cloud.buildings || {}, true);
+            mC = mergeMap(pay.contracts || {}, cloud.contracts || {});
+            mO = mergeOwners(pay.owners || [], cloud.owners || []);
+          }catch(e){ return ORIG_POST(url, body, timeoutMs); }
+
+          var n = mB.add.bld + mB.add.spot + mB.add.layout + mC.add + mO.add;
+          if(!n) return ORIG_POST(url, body, timeoutMs);   /* 消えるものが無い → そのまま送る */
+
+          var msg = '⚠️ このまま送ると、クラウドにあるデータが消えます。\n\n' +
+                    '【クラウドにあって、この端末に無いもの】\n' +
+                    addLines(mB.add) +
+                    (mC.add ? ('　契約　： ' + mC.add + '件\n') : '') +
+                    (mO.add ? ('　オーナー： ' + mO.add + '件\n') : '') +
+                    nameList(mB.names) +
+                    '\n【OK】どちらも残して送ります（おすすめ）\n' +
+                    '　　　この端末の内容に、上の分を足してから送ります。何も消えません。\n\n' +
+                    '【キャンセル】送りません（クラウドはそのままです）';
+
+          var doMerge = true;
+          try{ doMerge = window.confirm(msg); }catch(e){ doMerge = true; }
+
+          if(!doMerge){
+            /* もとの処理が「同期失敗」に書き換えるので、少し後で出し直します */
+            try{
+              window.setTimeout(function(){
+                try{ if(typeof setSyncStatus === 'function') setSyncStatus('error', '⚠️ 送信を止めました（クラウドはそのまま）'); }catch(e){}
+              }, 50);
+            }catch(e){}
+            return { ok:false, error:'送信を中止しました（この端末の操作で止めました）' };
+          }
+
+          /* 足した内容を、この端末にも反映しておきます */
+          try{
+            keepBefore();
+            writeThrough(mB.blds);
+            localStorage.setItem(cKey(), JSON.stringify(mC.map));
+            localStorage.setItem(oKey(), JSON.stringify(mO.list));
+            if(typeof requestRender === 'function') requestRender();
+          }catch(e){}
+
+          var nb = {};
+          Object.keys(body).forEach(function(k){ nb[k] = body[k]; });
+          nb.payload = {};
+          Object.keys(pay).forEach(function(k){ nb.payload[k] = pay[k]; });
+          nb.payload.buildings = mB.blds;
+          nb.payload.contracts = mC.map;
+          nb.payload.owners    = mO.list;
+
+          return Promise.resolve(ORIG_POST(url, nb, timeoutMs)).then(function(res){
+            try{ if(res && res.ok && typeof setSyncStatus === 'function') setSyncStatus('saved', '✅ 両方を残して送りました'); }catch(e){}
+            return res;
+          });
+        });
+      })();
+    };
+  }
+})();
