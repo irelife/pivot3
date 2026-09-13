@@ -1,4 +1,4 @@
-/* PIVOT2 realtime bell v29
+/* PIVOT3 realtime bell v29
  * 目的:
  *  - データ本体は監視しない
  *  - sync_bell という1ドキュメントだけを監視
@@ -9,8 +9,8 @@
 (function(){
   'use strict';
 
-  var PFX = (typeof insPrefix === 'function') ? insPrefix() : 'pivot2_';
-  var INS = PFX.replace(/_+$/, '') || 'pivot2';
+　var PFX = (typeof insPrefix === 'function') ? insPrefix() : 'pivot3_';
+　var INS = PFX.replace(/_+$/, '') || 'pivot3';
 
   var RTK = PFX + 'rt_client_id';
   var RTUSE = PFX + 'rt_use';
