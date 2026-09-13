@@ -49,7 +49,7 @@
   try{
     window.pvRealtimeUsage = function(){
       var u = readUse();
-      console.log('── PIVOT2 高速同期（呼び鈴）──');
+　　　console.log('── PIVOT3 高速同期（呼び鈴）──');
       console.log('呼び鈴イベント:', u.bellEvents || 0);
       console.log('呼び鈴書込み:', u.bellWrites || 0);
       console.log('3分保険の確認:', u.fallbackReads || 0);
