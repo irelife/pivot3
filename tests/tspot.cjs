@@ -3,7 +3,7 @@ const fs=require('fs');
 /* どこでも動くように：playwright があればそれを、無ければ playwright-core を使います */
 const {chromium}=(function(){ try{ return require('playwright'); }
                               catch(e){ return require('playwright-core'); } })();
-const DIR = process.argv[2] || require('path').join(__dirname, '..');   /* 引数が無ければ、このリポジトリの中身を見ます */
+const DIR = require('path').resolve(process.argv[2] || require('path').join(__dirname, '..'));   /* 相対パスで渡されても file:// が壊れないよう、必ず絶対パスに直します */
 let FAKE=eval(fs.readFileSync(__dirname+'/tquota.cjs','utf8').match(/const FAKE = (`[\s\S]*?`);\n/)[1]);
 FAKE = FAKE.replace('var DB = { docs:{} };', [
   "var _raw=(function(){ try{ return JSON.parse(sessionStorage.getItem('__fakedb')||'{}'); }catch(e){ return {}; } })();",
