@@ -3299,10 +3299,22 @@
       }catch(e){}
     }
 
+    /* ★ 見張りを止められるようにします。
+       画面を見ていないあいだは、ほかの端末の合図を受け取る必要がありません。
+       受け取るだけで読み取り回数を使うので、台数が増えるほど効いてきます
+       （合図は3分ごと。n台なら1日あたり 480×n×n 回の読み取りになります）。 */
+    var _un = null;
+    function unwatch(){
+      try{ if(_un){ _un(); } }catch(e){}
+      _un = null;
+      try{ show([]); }catch(e){}
+    }
     function watch(){
       try{
         if(!firebase.auth().currentUser) return;
-        pcol().onSnapshot(function(qs){
+        if(_un) return;              /* すでに見張っています */
+        if(document.hidden) return;  /* 画面を見ていないときは見張りません */
+        _un = pcol().onSnapshot(function(qs){
           var now = Date.now(), list = [];
           qs.forEach(function(d){
             if(d.id === myId) return;
@@ -3321,12 +3333,13 @@
        前の合図から3分たっているときだけにします。 */
     var _lastBeat = 0;
     try{ document.addEventListener('visibilitychange', function(){
-      if(document.hidden){ return; }
+      if(document.hidden){ unwatch(); return; }   /* 離れたら見張りをやめます */
+      watch();                                    /* 戻ってきたら見張りを戻します */
       var n = Date.now();
       if(n - _lastBeat < 180000) return;
       _lastBeat = n; beat();
     }); }catch(e){}
-    try{ window.addEventListener('pagehide', bye); }catch(e){}
+    try{ window.addEventListener('pagehide', function(){ bye(); unwatch(); }); }catch(e){}
   })();
 
   /* ============================================================
