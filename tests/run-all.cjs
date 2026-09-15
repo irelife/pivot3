@@ -10,7 +10,7 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 
-const DIR = process.argv[2] || path.join(__dirname, '..');
+const DIR = path.resolve(process.argv[2] || path.join(__dirname, '..'));
 
 const SUITES = [
   ['tbasic',    '基本の保存（入力が消えない・前に戻らない・端末間で同じ）'],
