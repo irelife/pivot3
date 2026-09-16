@@ -1055,7 +1055,7 @@
     try{ mine = (typeof pbLoadAll === 'function') ? (pbLoadAll() || {}) : {}; }catch(e){ mine = {}; }
     if(!mine || typeof mine !== 'object') mine = {};
     var oldR = readMap(revKey()), oldS = readMap(sigKey()), oldF = fprRead();
-    var out = {}, revs = {}, sigs = {}, fprs = {}, id, mySig, kept = 0;
+    var out = {}, revs = {}, sigs = {}, fprs = {}, id, mySig, kept = 0, broke = 0;
     var has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k); };
 
     for(id in fs.buildings){
@@ -1064,6 +1064,17 @@
         mySig = null;
         try{ mySig = sig(toDoc(id, mine[id])); }catch(e){ mySig = null; }
         if(mySig !== null && mySig !== oldS[id]){
+          /* ★★ 契約とまったく同じ理由です（adoptCts の長い説明をご覧ください）。
+               中身が空になった手元のものは、直しではなく壊れです。
+               クラウドに中身があるなら、クラウドを取ります。        */
+          if(!bodyOf(toDoc(id, mine[id])) && bodyOf(toDoc(id, fs.buildings[id]))){
+            out[id]  = fs.buildings[id];
+            revs[id] = fs.revs[id];
+            sigs[id] = fs.sigs[id];
+            try{ fprs[id] = fprOf(toDoc(id, fs.buildings[id])); }catch(e){}
+            broke++;
+            continue;
+          }
           out[id]  = mine[id];                 /* まだ送っていない直し → 残します */
           revs[id] = oldR[id];
           sigs[id] = oldS[id];
@@ -1084,6 +1095,10 @@
       kept++;
     }
     if(kept){ try{ console.log('[D] まだ送っていない直し ' + kept + ' 件は、手元を残しました'); }catch(e){} }
+    if(broke){
+      try{ console.warn('[D] 中身が空になっていた物件 ' + broke + ' 件は、クラウドから戻しました'); }catch(e){}
+      try{ status('saved', '✅ 中身が空になっていた物件 ' + broke + ' 件を、クラウドから戻しました'); }catch(e){}
+    }
     return { out:out, revs:revs, sigs:sigs, fprs:fprs, kept:kept };
   }
 
@@ -1093,7 +1108,7 @@
     try{ mine = JSON.parse(localStorage.getItem(ctLS()) || '{}') || {}; }catch(e){ mine = {}; }
     if(!mine || typeof mine !== 'object') mine = {};
     var oldR = readMap(ctRevK()), oldS = readMap(ctSigK());
-    var out = {}, revs = {}, sigs = {}, id, mySig, kept = 0;
+    var out = {}, revs = {}, sigs = {}, id, mySig, kept = 0, broke = 0;
     var has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k); };
 
     for(id in cs.map){
@@ -1102,6 +1117,27 @@
         mySig = null;
         try{ mySig = sig(ctDoc(id, mine[id])); }catch(e){ mySig = null; }
         if(mySig !== null && mySig !== oldS[id]){
+          /* ★★ 中身が空になった手元のものは、
+           *   「まだ送っていない直し」ではありません。壊れているだけです。
+           *
+           *  2026/9/16、契約215件すべてが
+           *    （物件未入力）（契約者未入力）
+           *  になりました。手元の置き場が壊れた形です。
+           *
+           *  ところが、ここが「指紋がちがう＝この端末の新しい直し」と
+           *  読んで、壊れたほうを残していました。
+           *  だから何度開き直しても、クラウドの正しい契約が戻りません。
+           *
+           *  クラウドに中身があって、手元が空なら、クラウドを取ります。
+           *  （送るほうは、もともと空のものを送らない作りです。
+           *    ですので、クラウド側は無事です）                     */
+          if(!ctBody(mine[id]) && ctBody(cs.map[id])){
+            out[id]  = cs.map[id];
+            revs[id] = cs.revs[id];
+            sigs[id] = cs.sigs[id];
+            broke++;
+            continue;
+          }
           out[id]  = mine[id];
           revs[id] = oldR[id];
           sigs[id] = oldS[id];
@@ -1120,7 +1156,11 @@
       kept++;
     }
     if(kept){ try{ console.log('[E] まだ送っていない契約の直し ' + kept + ' 件は、手元を残しました'); }catch(e){} }
-    return { out:out, revs:revs, sigs:sigs, kept:kept };
+    if(broke){
+      try{ console.warn('[E] 中身が空になっていた契約 ' + broke + ' 件は、クラウドから戻しました'); }catch(e){}
+      try{ status('saved', '✅ 中身が空になっていた契約 ' + broke + ' 件を、クラウドから戻しました'); }catch(e){}
+    }
+    return { out:out, revs:revs, sigs:sigs, kept:kept, broke:broke };
   }
 
   function commit(pl){
@@ -3013,6 +3053,105 @@
     try{ window.__pvSyncNow = function(){ quietSync(true);
       _lastOw = 0; syncOws(true); _lastCt = 0; syncCts(true); }; }catch(e){}
   })();
+
+  /* ============================================================
+   *  ★★ 新しい版が出ていないか、この画面が自分で見に行きます
+   *
+   *  2026/9/16、こういうことが起きました。
+   *
+   *    22:48  直したものをマージ
+   *    22:49  配信おわり
+   *    22:51  画面には、まだ直る前のものが出ている
+   *
+   *  直っていなかったのではありません。
+   *  その画面は 22:08 に読み込んだもので、40分前のコードのままでした。
+   *
+   *  js のファイルには ?v=40 のような番号を付けていて、
+   *  番号を上げれば新しいものを取りに行きます。
+   *  けれど、その番号が書いてある index.html 自身には、何も付いていません。
+   *  Safari が index.html を古いまま持っていると、
+   *  何度開き直しても、古い番号を読み続けます。
+   *
+   *    index.html（古いまま Safari の中） → store.js?v=39 を要求
+   *                                          ↑ 新しい v=40 に、たどり着けない
+   *
+   *  「マージしたら開き直してください」とお願いしていましたが、
+   *  開き直しても効かない作りでした。お客様に見分けようがありません。
+   *
+   *  ですので、画面が自分で見に行きます。
+   *    ・いま自分が読み込んでいる store.js の番号を、自分で調べる
+   *    ・index.html を、キャッシュを使わずに取り直して、番号をくらべる
+   *    ・新しいほうが大きければ、上に赤い帯を出す
+   *    ・押すと、確実に新しくなる形で 開き直す
+   *
+   *  Firestore は使いません。手で設定するものもありません。
+   *  10分に1回、index.html を1つ取るだけです。
+   * ============================================================ */
+  var _newV = 0;
+
+  function myScriptV(){
+    try{
+      var ss = document.getElementsByTagName('script'), i, m;
+      for(i = 0; i < ss.length; i++){
+        m = String(ss[i].getAttribute('src') || '').match(/store\.js\?v=(\d+)/);
+        if(m) return Number(m[1]) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+
+  function newBar(mine, now){
+    try{
+      var id = 'pv-newver-bar', el = document.getElementById(id);
+      if(!el){
+        el = document.createElement('div');
+        el.id = id;
+        el.style.cssText =
+          'position:fixed;left:0;right:0;top:0;z-index:100002;background:#b91c1c;color:#fff;' +
+          'font-weight:800;font-size:14px;line-height:1.5;padding:11px 14px;text-align:center;' +
+          'cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+        el.onclick = function(){
+          /* ★ ただの開き直しでは、古い index.html がまた使われます。
+               URL を変えて、必ず新しく取りに行かせます。          */
+          try{ location.replace(location.pathname + '?v=' + Date.now()); }
+          catch(e){ location.reload(); }
+        };
+        document.body.appendChild(el);
+        try{ document.body.style.paddingTop = '44px'; }catch(e){}
+      }
+      el.textContent = '⚠️ 新しい版が出ています（この画面 ' + mine + ' ／ 新しい版 ' + now +
+                       '）。ここを押して取り込んでください。';
+    }catch(e){}
+  }
+
+  function checkNewBuild(){
+    try{
+      if(location.protocol === 'file:') return;      /* 検査のときは見に行きません */
+      var mine = myScriptV();
+      if(!mine) return;
+      if(_newV) return;                              /* もう帯を出しています */
+      fetch(location.pathname + '?_t=' + Date.now(), { cache:'no-store' })
+        .then(function(r){ return r.ok ? r.text() : null; })
+        .then(function(t){
+          if(!t) return;
+          var m = String(t).match(/store\.js\?v=(\d+)/);
+          if(!m) return;
+          var now = Number(m[1]) || 0;
+          if(now > mine){
+            _newV = now;
+            newBar(mine, now);
+            try{ console.warn('[V] 新しい版が出ています この画面 ' + mine + ' / 新しい版 ' + now); }catch(e){}
+          }
+        })
+        .catch(function(){});
+    }catch(e){}
+  }
+  try{ setTimeout(checkNewBuild, 8000); }catch(e){}
+  try{ setInterval(checkNewBuild, 10 * 60 * 1000); }catch(e){}
+  try{ document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) setTimeout(checkNewBuild, 2000);
+  }); }catch(e){}
+  try{ window.__pvCheckNewBuild = checkNewBuild; }catch(e){}
 
   /* ---------- 古い画面かどうかを確かめます ---------- */
   function oldBar(){
