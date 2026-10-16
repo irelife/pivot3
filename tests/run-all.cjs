@@ -58,6 +58,7 @@ const SUITES = [
   ['tnewver',   '新しい版が出たら、画面が自分で気づく'],
   ['twari',     '30％保証の日割り（画面と LINE で金額が合う）'],
   ['tlogo',     '画面まわり'],
+  ['tarea',     'PIVOT2 と PIVOT3 のエリア判定が、2つのファイルで食いちがわない'],
 ];
 
 let ngList = [];
