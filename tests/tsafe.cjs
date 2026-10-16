@@ -57,8 +57,12 @@ const SENT=[];
     last?(last.payload.buildings['b5']||{}).name:null);
 
  console.log('\n❷ ほかの端末が直した物件を、保存で消さない');
+ /* ★ ほかの端末が「いま」直したことにします。
+       日付を過去にすると、アプリは「前に読んだときより古い」と見て
+       正しく読み飛ばします（＝取り込まれないのが正しい動き）。
+       本物の端末は、必ず今より新しい日付を付けて保存します。 */
  await pg.evaluate((p)=>{ window.__set(p,'b9',{id:'b9',name:'ほかの端末が直した',addr:'住所9',spots:{},
-   rev:2,updatedAt:'2026-09-30T00:00:00.000Z',updatedBy:'ほか'}); }, BP);
+   rev:2,updatedAt:new Date(Date.now()+60000).toISOString(),updatedBy:'ほか'}); }, BP);
  SENT.length=0;
  await pg.evaluate(()=>{ var all=pbLoadAll(); all['b6'].name='★2つめ'; pbSaveRaw(all); window.__pushNow(); });
  await pg.waitForTimeout(3500);

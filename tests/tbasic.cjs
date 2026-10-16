@@ -131,15 +131,23 @@ const NET={up:true};
 
  console.log('\nB4 15分ごとの読み直しが、入力中の内容を上書きしない');
  await pg.evaluate(()=>{ var all=pbLoadAll(); all['b28'].name='★B4いま入力中'; pbSaveRaw(all); });
+ /* ★ ほかの端末が「いま」直したことにします。
+       日付を過去にすると、アプリは「前に読んだときより古い」と見て
+       正しく読み飛ばします（＝取り込まれないのが正しい動き）。
+       本物の端末は、必ず今より新しい日付を付けて保存します。 */
  await pg.evaluate((p)=>{ window.__set(p,'b28',{id:'b28',name:'クラウドの古い内容',addr:'住所28',spots:{},
-   rev:9,updatedAt:'2026-10-02T00:00:00.000Z',updatedBy:'ほか'}); }, BP);
+   rev:9,updatedAt:new Date(Date.now()+60000).toISOString(),updatedBy:'ほか'}); }, BP);
  await pg.evaluate(()=>{ try{ window.__pvSyncNow(); }catch(e){} }); await pg.waitForTimeout(2500);
  ok('★ 入力中の内容が消えない', (await mineName('b28'))==='★B4いま入力中', await mineName('b28'));
 
  console.log('\n══ C スマホとPCで情報が違う ══');
  console.log('\nC1 ほかの端末が直した物件が、開き直さずに出る');
+ /* ★ ほかの端末が「いま」直したことにします。
+       日付を過去にすると、アプリは「前に読んだときより古い」と見て
+       正しく読み飛ばします（＝取り込まれないのが正しい動き）。
+       本物の端末は、必ず今より新しい日付を付けて保存します。 */
  await pg.evaluate((p)=>{ window.__set(p,'b29',{id:'b29',name:'★C1スマホから',addr:'住所29',spots:{},
-   rev:5,updatedAt:'2026-10-05T00:00:00.000Z',updatedBy:'スマホ'}); }, BP);
+   rev:5,updatedAt:new Date(Date.now()+60000).toISOString(),updatedBy:'スマホ'}); }, BP);
  await pg.evaluate(()=>{ try{ window.__pvSyncNow(); }catch(e){} }); await pg.waitForTimeout(2500);
  ok('★ 出てくる', (await mineName('b29'))==='★C1スマホから', await mineName('b29'));
 
