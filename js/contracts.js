@@ -3228,11 +3228,13 @@ const INFO_FIELDS = [
     inputs:() => (_editingType==='法人'
         ? [{id:'f-contractor', label:'法人名', type:'text'},
            {id:'f-carContractor', label:'駐車場契約者(空欄なら法人名と同じ)', type:'text', ph:'入居者名など'},
-           {id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'}]
-        : [{id:'f-contractor', label:'契約者(個人)', type:'text'}]),
+           {id:'f-agent', label:'代行会社', type:'text', ph:'例: ○○管理'},
+           {id:'f-tenantMail', label:'入居者のメール(入居のしおりの送り先)', type:'text', ph:'例: taro@example.com'}]
+        : [{id:'f-contractor', label:'契約者(個人)', type:'text'},
+           {id:'f-tenantMail', label:'入居者のメール(入居のしおりの送り先)', type:'text', ph:'例: taro@example.com'}]),
     value:() => gv('f-contractor') },
   { key:'agency',   icon:'agency',   label:'仲介・担当',
-    inputs:[{id:'f-broker', label:'仲介業者', type:'text'},{id:'f-staff', label:'担当者', type:'text'}],
+    inputs:[{id:'f-broker', label:'仲介業者', type:'text'},{id:'f-staff', label:'担当者', type:'text'},{id:'f-brokerAddr', label:'仲介業者の住所(鍵渡しの予定に入ります)', type:'text', ph:'例: 岡山市北区〇〇1-2-3'}],
     value:() => { const b=gv('f-broker'), s=gv('f-staff'); return [b,s].filter(Boolean).join(' / '); } },
   { key:'parking',  icon:'car',      label:'駐車場',
     inputs:[{id:'f-parking', label:'区画番号', type:'text', ph:'例: P-12'},{id:'f-parkingPrice', label:'駐車場の月額(円・任意)', type:'text', ph:'例: 4400'}],
@@ -3492,6 +3494,8 @@ function fillForm(c){
   set('f-agent', c.agent);
   set('f-broker', c.broker);
   set('f-staff', c.staff);
+  set('f-tenantMail', c.tenantMail);
+  set('f-brokerAddr', c.brokerAddr);
   set('f-insurance', c.insurance);
   set('f-invoice', c.invoice);
   set('f-keyExchange', c.keyExchange);
@@ -3536,6 +3540,9 @@ function buildContractObject(){
     agent: get('f-agent'),
     broker: get('f-broker'),
     staff: get('f-staff'),
+    /* 入居者のメール・仲介業者の住所。欄がない画面では、前の値をそのまま残します */
+    tenantMail: document.getElementById('f-tenantMail') ? get('f-tenantMail') : ((existing && existing.tenantMail) || ''),
+    brokerAddr: document.getElementById('f-brokerAddr') ? get('f-brokerAddr') : ((existing && existing.brokerAddr) || ''),
     insurance: _editingItemValues.insurance || '',
     invoice: _editingItemValues.invoice || '',
     keyExchange: _editingItemValues.keyExchange || '',
