@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>PIVOT4 クラウド移行</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;background:#f5f5f6;color:#17171a;padding:16px}
+.w{max-width:760px;margin:0 auto;background:#fff;border-radius:14px;padding:22px 20px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+h1{font-size:22px;margin-bottom:6px}
+.sub{font-size:14px;color:#6b6b73;margin-bottom:16px}
+.box{border:2px solid #17171a;border-radius:10px;padding:12px 14px;margin:12px 0;font-size:15px;line-height:1.7}
+.box.warn{border-color:#b45309;background:#fffbeb}
+button{font:inherit;font-weight:800;padding:14px 20px;min-height:48px;border-radius:10px;border:2px solid #17171a;
+       background:#17171a;color:#fff;cursor:pointer;margin:6px 8px 6px 0}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.armed{background:#b45309;border-color:#b45309}
+#log{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.6;
+     background:#fafafa;border:1px solid #ddd;border-radius:8px;padding:12px;margin-top:14px;max-height:460px;overflow:auto}
+</style>
+</head>
+<body>
+<div class="w">
+  <h1>PIVOT4 クラウド移行</h1>
+  <div class="sub" id="inst">確認中…</div>
+
+  <div class="box">
+    PIVOT4 のスプレッドシートにある<b>物件</b>を、クラウド（Firestore）に写します。<br>
+    <b>スプレッドシートには書き込みません。</b>何も消えません。<br>
+    契約とオーナーは、写したあとに PIVOT4 を開き直すと自動で写ります。
+  </div>
+
+  <div class="box warn">
+    <b>実行する前に</b><br>
+    ・PIVOT4 を開いてログインしておいてください（このページは同じログインを使います）<br>
+    ・移行中は、ほかの端末で PIVOT4 を保存しないでください
+  </div>
+
+  <p>
+    <button id="btn-dry" disabled>① 下見（数だけ確認）</button>
+    <button id="btn-run" disabled>② 実行（クラウドに写す）</button>
+  </p>
+
+  <div id="log">準備中…</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="../js/firebase-config.js?v=1"></script>
+<script>
+/* このページは PIVOT4 専用です。ほかの場所に置かれても動きません。 */
+var INS = 'pivot4';
+var OK_PATH = /\/pivot4\/migrate\.html$/.test(location.pathname || '');
+
+var logEl = document.getElementById('log');
+function log(s){ logEl.textContent += '\n' + s; logEl.scrollTop = logEl.scrollHeight; }
+function clr(){ logEl.textContent = ''; }
+
+/* PIVOT4 が使っている GAS の URL（端末に入っているもの → なければ共通設定） */
+function gasUrl(){
+  try{ return (localStorage.getItem('pivot4_cloud_url') || '').trim(); }catch(e){ return ''; }
+}
+async function resolveGasUrl(db){
+  var u = gasUrl();
+  if(u) return u;
+  var d = await db.collection('config').doc(INS).get();
+  return d.exists ? String((d.data() || {}).gasUrl || '').trim() : '';
+}
+
+async function postToGas(url, body){
+  var res = await fetch(url, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body:JSON.stringify(body), redirect:'follow'
+  });
+  var text = await res.text();
+  try{ return JSON.parse(text); }catch(e){ throw new Error('GASの応答が読めません: ' + text.slice(0, 200)); }
+}
+
+/* ===== js/store.js と同じ形に変えます（ここを合わせないと全物件が「変更あり」になります） ===== */
+var META = { rev:1, updatedAt:1, updatedBy:1, migratedAt:1 };
+function spotsToMap(spots){
+  var m = {}, dup = [], i, s, k, o, f;
+  for(i = 0; i < (spots || []).length; i++){
+    s = spots[i] || {};
+    k = (s.no === null || s.no === undefined) ? '' : String(s.no);
+    if(!k) continue;
+    if(m[k]){ if(dup.indexOf(k) < 0) dup.push(k); continue; }
+    o = {};
+    for(f in s){ if(Object.prototype.hasOwnProperty.call(s, f) && s[f] !== undefined) o[f] = s[f]; }
+    o.no = s.no;
+    o.type   = s.type   || '並';
+    o.tou    = s.tou    || '';
+    o.room   = (s.room === null || s.room === undefined) ? '' : s.room;
+    o.user   = s.user   || '';
+    o.price  = s.price  || 0;
+    o.status = s.status || '空';
+    o.note   = s.note   || '';
+    m[k] = o;
+  }
+  return { map:m, dup:dup };
+}
+function toDoc(id, b){
+  var d = {}, f;
+  for(f in b){
+    if(!Object.prototype.hasOwnProperty.call(b, f)) continue;
+    if(f === 'spots' || META[f]) continue;
+    if(b[f] === undefined) continue;
+    d[f] = b[f];
+  }
+  d.id    = id;
+  d.name  = b.name || '';
+  d.addr  = b.addr || '';
+  var c = spotsToMap(b.spots);
+  d.spots = c.map;
+  return { doc:d, dup:c.dup };
+}
+
+var db = null, _payload = null, _armed = false;
+
+function summarize(p){
+  var b = p.buildings || {}, ids = Object.keys(b), spot = 0, dup = [];
+  ids.forEach(function(id){
+    var t = toDoc(id, b[id]);
+    spot += Object.keys(t.doc.spots).length;
+    if(t.dup.length) dup.push((b[id].name || id) + '： P' + t.dup.join('・P'));
+  });
+  return { bld:ids.length, spot:spot, dup:dup };
+}
+
+document.getElementById('btn-dry').onclick = async function(){
+  try{
+    clr(); log('【下見】クラウドには何も書きません。');
+    var exist = await db.collection(INS).doc('data').collection('buildings').limit(1).get();
+    if(!exist.empty){
+      log('');
+      log('✅ PIVOT4 はもうクラウドに移っています。このページでやることはありません。');
+      return;
+    }
+    var url = await resolveGasUrl(db);
+    if(!url) throw new Error('PIVOT4 の GAS の URL が見つかりません。');
+    log('スプレッドシートから読み込み中…');
+    var r = await postToGas(url, { action:'load' });
+    if(!r || !r.ok || !r.payload) throw new Error('読めませんでした: ' + JSON.stringify(r).slice(0, 200));
+    _payload = r.payload;
+    var s = summarize(_payload);
+    log('');
+    log('  物件　　 ： ' + s.bld + ' 件');
+    log('  区画　　 ： ' + s.spot);
+    log('  契約　　 ： ' + Object.keys(_payload.contracts || {}).length + ' 件（あとで自動）');
+    log('  オーナー ： ' + ((_payload.owners || []).length) + ' 件（あとで自動）');
+    log('');
+    if(s.dup.length){
+      log('  ⚠️ 区画番号が二重の物件（最初の1件だけ残します）');
+      s.dup.forEach(function(x){ log('     ' + x); });
+    } else {
+      log('  ✅ 区画番号の二重はありません');
+    }
+    log('');
+    log('この数で合っていれば「② 実行」を押してください。');
+    document.getElementById('btn-run').disabled = false;
+  }catch(e){ log('❌ ' + e.message); }
+};
+
+/* 確認ダイアログは使いません（出ない端末があるため）。2回押しで実行します。 */
+document.getElementById('btn-run').onclick = async function(){
+  var btn = this;
+  if(!_payload){ log('先に「① 下見」を押してください。'); return; }
+  if(!_armed){
+    _armed = true;
+    btn.classList.add('armed');
+    btn.textContent = 'もう一度押すと実行します';
+    setTimeout(function(){ if(_armed && !btn.disabled){ _armed = false; btn.classList.remove('armed'); btn.textContent = '② 実行（クラウドに写す）'; } }, 8000);
+    return;
+  }
+  try{
+    btn.disabled = true;
+    clr(); log('【実行】クラウドへ書き込みます…');
+    var again = await db.collection(INS).doc('data').collection('buildings').limit(1).get();
+    if(!again.empty){ log('✅ すでに移っていました。何もしていません。'); return; }
+
+    var b = _payload.buildings || {}, ids = Object.keys(b);
+    var now = new Date().toISOString();
+    var me  = (firebase.auth().currentUser || {}).email || '';
+    var col = db.collection(INS).doc('data').collection('buildings');
+    var batch = db.batch(), n = 0, done = 0, i, d;
+    for(i = 0; i < ids.length; i++){
+      d = toDoc(ids[i], b[ids[i]]).doc;
+      d.rev = 1; d.updatedAt = now; d.updatedBy = me; d.migratedAt = now;
+      batch.set(col.doc(ids[i]), d);
+      n++;
+      if(n >= 400){ await batch.commit(); done += n; log('　' + done + ' / ' + ids.length + ' 件…'); batch = db.batch(); n = 0; }
+    }
+    if(n){ await batch.commit(); done += n; }
+    var s = summarize(_payload);
+    await db.collection(INS).doc('data').set({
+      instance:INS, migratedAt:now, migratedBy:me, count:{ bld:s.bld, spot:s.spot }
+    }, { merge:true });
+
+    log('　' + done + ' / ' + ids.length + ' 件');
+    log('');
+    log('✅ 完了しました。物件 ' + s.bld + ' 件・区画 ' + s.spot + ' をクラウドに写しました。');
+    log('   スプレッドシートは変わっていません。');
+    log('');
+    log('次に PIVOT4 を開き直してください。契約とオーナーが自動で写ります。');
+  }catch(e){
+    log('❌ ' + e.message);
+    log('（権限エラーのときは、Firestore のルールを確認してください）');
+    btn.disabled = false; _armed = false;
+    btn.classList.remove('armed'); btn.textContent = '② 実行（クラウドに写す）';
+  }
+};
+
+(function start(){
+  if(!OK_PATH){
+    document.getElementById('inst').textContent = 'このページは /pivot4/migrate.html でだけ動きます。';
+    logEl.textContent = '止めました。';
+    return;
+  }
+  document.getElementById('inst').textContent = '対象： PIVOT4（岡山市・赤磐市）';
+  db = firebase.firestore();
+  firebase.auth().onAuthStateChanged(function(u){
+    if(u){
+      logEl.textContent = 'ログイン中： ' + u.email + '\n「① 下見」から始めてください。';
+      document.getElementById('btn-dry').disabled = false;
+    } else {
+      logEl.textContent = 'ログインしていません。先に PIVOT4 を開いてログインしてから、このページを開き直してください。';
+    }
+  });
+})();
+</script>
+</body>
+</html>
