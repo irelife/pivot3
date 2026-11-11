@@ -1132,5 +1132,46 @@
 (function(){function f(){try{var e=document.querySelector('#pv-side .lg');if(e&&e.firstChild&&e.firstChild.nodeType===3){e.firstChild.nodeValue='PIVOT4 岡山市・赤磐市';}}catch(x){}}
 document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);setTimeout(f,2000);});})();
 </script>
+<!-- LINE の「PIVOT4を開く」ボタン（…/pivot4/?view=contract&card=カードID）で開いたときは、
+     契約（Contract）の画面を出して、そのカードの所まで動かし、光らせる -->
+<style>
+@keyframes pv-line-flash{0%,100%{box-shadow:0 0 0 0 rgba(242,92,132,0)}50%{box-shadow:0 0 0 6px rgba(242,92,132,.85)}}
+.ct-card.pv-line-target{animation:pv-line-flash 1s ease-in-out 4;outline:3px solid #F25C84;outline-offset:2px}
+</style>
+<script>
+(function(){
+  var want = '', cardId = '';
+  try{
+    var q = new URLSearchParams(location.search);
+    want = q.get('view') || '';
+    cardId = q.get('card') || '';
+  }catch(e){ return; }
+  if(want !== 'contract') return;
+  var touched = false;   // 開いたあと人が画面を触ったら、もう動かさない
+  ['click','touchstart','wheel'].forEach(function(ev){
+    document.addEventListener(ev, function(){ touched = true; }, {capture:true, passive:true});
+  });
+  var found = false;
+  function esc(v){ try{ return CSS.escape(v); }catch(e){ return String(v).replace(/"/g,'\\"'); } }
+  function go(){
+    if(touched || found) return;
+    if(typeof window.switchApp !== 'function' || !document.getElementById('tab-kanban')) return;
+    if(!document.body.classList.contains('tab-kanban')){ try{ window.switchApp('kanban'); }catch(e){} }
+    if(!cardId) return;
+    var el = document.querySelector('.ct-card[data-id="' + esc(cardId) + '"]');
+    if(!el || !el.offsetParent) return;   // まだ画面にない（データの読み込み待ち）
+    found = true;
+    try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ el.scrollIntoView(); }
+    el.classList.add('pv-line-target');
+    setTimeout(function(){ el.classList.remove('pv-line-target'); }, 6000);
+  }
+  // 読み込みやクラウドからの取り込みが終わるまで、少しずつ待ちながら探す（最大30秒）
+  var tries = 0;
+  var t = setInterval(function(){ tries++; go(); if(found || touched || tries >= 60) clearInterval(t); }, 500);
+  document.addEventListener('DOMContentLoaded', go);
+  // アドレス欄から ?view=… を消す（更新したときは、ふつうに物件一覧から開く）
+  setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 30000);
+})();
+</script>
 </body>
 </html>
