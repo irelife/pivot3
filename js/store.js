@@ -3002,6 +3002,33 @@
       if(u) setTimeout(function(){ syncCts(true); }, 5000);
     }); }catch(e){}
     try{ window.__pvSyncContracts = function(){ _lastCt = 0; syncCts(true); }; }catch(e){}
+    /* ★ LINE の「PIVOT4を開く」から来たとき用：
+         指定した1枚の契約だけを、クラウドからすぐ読みます。
+         手元にまだ無いカードだけを足します（手元にあるものは触りません）。
+         読み直しの安全装置（入力中・未送信など）を待たずに、その場で出せます。
+         新しく足すだけなので、ほかの契約や、まだ送っていない直しには影響しません。 */
+    try{ window.__pvFetchContract = function(id){
+      id = String(id || '');
+      if(!id) return Promise.resolve(false);
+      try{ if(!firebase.auth().currentUser) return Promise.resolve(false); }catch(e){ return Promise.resolve(false); }
+      return ctCol().doc(id).get({ source:'server' }).then(function(doc){
+        if(!doc || !doc.exists) return false;
+        var mine = {};
+        try{ mine = JSON.parse(localStorage.getItem(ctLS()) || '{}') || {}; }catch(e){ return false; }
+        if(Object.prototype.hasOwnProperty.call(mine, id)) return true;      /* もう手元にある */
+        var d = doc.data() || {}, c = ctFrom(d), r = {}, g = {};
+        mine[id] = c;
+        try{ localStorage.setItem(ctLS(), JSON.stringify(mine)); }catch(e){ return false; }
+        r[id] = d.rev || 0;
+        g[id] = sig(ctDoc(id, c));
+        mergeMap(ctRevK(), r);
+        mergeMap(ctSigK(), g);
+        try{ if(typeof renderBoard === 'function') renderBoard(); }catch(e){}
+        try{ if(typeof renderStats === 'function') renderStats(); }catch(e){}
+        try{ console.log('[E] LINE のリンクの契約を1件読み込みました：' + id); }catch(e){}
+        return true;
+      }).catch(function(){ return false; });
+    }; }catch(e){}
 
     try{ setInterval(function(){ syncOws(true); }, 900000); }catch(e){}
     try{ document.addEventListener('visibilitychange', function(){

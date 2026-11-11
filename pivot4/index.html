@@ -1121,7 +1121,7 @@
 <script src="../js/mobilesheet.js?v=9"></script>
 <script src="../js/spotcards.js?v=2"></script>
 <script src="../js/swipedel.js?v=1"></script>
-<script src="../js/store.js?v=42"></script>
+<script src="../js/store.js?v=43"></script>
 <script src="../js/realtime.js?v=3"></script>
 <script src="../js/uifix.js?v=28"></script>
 <script src="../js/areaclean.js?v=2"></script>
@@ -1152,18 +1152,22 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
   document.addEventListener('click', function(e){
     try{ if(e.isTrusted && e.target.closest('.app-tab, .modal-tab-btn, #pv-side a')) touched = true; }catch(x){}
   }, true);
-  var found = false;
+  var found = false, fetched = false, fetching = false, lastFetch = 0;
   function esc(v){ try{ return CSS.escape(v); }catch(e){ return String(v).replace(/"/g,'\\"'); } }
   function go(){
     if(touched || found) return;
     if(typeof window.switchApp !== 'function' || !document.getElementById('tab-kanban')) return;
     if(!document.body.classList.contains('tab-kanban')){ try{ window.switchApp('kanban'); }catch(e){} }
     if(!cardId) return;
-    // カードのデータが届くまで待つ（GAS がカードを作った直後に開いた場合もここで待つ）
-    var has = false;
-    try{ has = (typeof loadAll === 'function') && !!loadAll()[cardId]; }catch(e){}
     var el = document.querySelector('.ct-card[data-id="' + esc(cardId) + '"]');
-    if(!has && !el) return;
+    if(!el && !fetched){
+      // 手元にまだ無いカードは、クラウドからその1枚だけをすぐ読む（ログインが済み次第）
+      if(!fetching && Date.now() - lastFetch > 3000 && typeof window.__pvFetchContract === 'function'){
+        fetching = true; lastFetch = Date.now();   // 読めなかったときは3秒おきにやり直す
+        window.__pvFetchContract(cardId).then(function(ok){ fetching = false; if(ok){ fetched = true; go(); } });
+      }
+      return;
+    }
     found = true;
     if(el && el.offsetParent){
       try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ el.scrollIntoView(); }
@@ -1173,19 +1177,11 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
     // カードそのもの（編集画面）を開いて見せる
     setTimeout(function(){
       try{ if(window.KB && typeof window.KB.openSheet === 'function') window.KB.openSheet(cardId); }catch(e){}
-    }, el ? 900 : 100);
+    }, el ? 900 : 300);
   }
-  // 読み込みやクラウドからの取り込みが終わるまで、少しずつ待ちながら探す（最大60秒）
+  // 読み込みやログインが終わるまで、少しずつ待ちながら探す（最大60秒）
   var tries = 0;
-  var t = setInterval(function(){
-    tries++; go();
-    // カードがまだ手元にないときは、クラウドから契約を取り込み直す（3秒後・10秒後・25秒後）
-    // （この端末が前に読んだあとに GAS が作ったカードは、取り込み直さないと出てこないことがあるため）
-    if(!found && cardId && (tries === 6 || tries === 20 || tries === 50)){
-      try{ if(typeof window.__pvSyncContracts === 'function') window.__pvSyncContracts(); }catch(e){}
-    }
-    if(found || touched || tries >= 120) clearInterval(t);
-  }, 500);   // 最大60秒待つ
+  var t = setInterval(function(){ tries++; go(); if(found || touched || tries >= 120) clearInterval(t); }, 500);
   document.addEventListener('DOMContentLoaded', go);
   // アドレス欄から ?view=… を消す（更新したときは、ふつうに物件一覧から開く）
   setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 60000);
