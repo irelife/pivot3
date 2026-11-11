@@ -1147,10 +1147,11 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
     cardId = q.get('card') || '';
   }catch(e){ return; }
   if(want !== 'contract') return;
-  var touched = false;   // 開いたあと人が画面を触ったら、もう動かさない
-  ['click','touchstart','wheel'].forEach(function(ev){
-    document.addEventListener(ev, function(){ touched = true; }, {capture:true, passive:true});
-  });
+  var touched = false;   // 開いたあと人が Property／Owner Mail などの画面切り替えを押したら、もう動かさない
+  // （スマホで画面に触れたり、スクロールしただけでは止めない）
+  document.addEventListener('click', function(e){
+    try{ if(e.isTrusted && e.target.closest('.app-tab, .modal-tab-btn, #pv-side a')) touched = true; }catch(x){}
+  }, true);
   var found = false;
   function esc(v){ try{ return CSS.escape(v); }catch(e){ return String(v).replace(/"/g,'\\"'); } }
   function go(){
@@ -1174,12 +1175,12 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
       try{ if(window.KB && typeof window.KB.openSheet === 'function') window.KB.openSheet(cardId); }catch(e){}
     }, el ? 900 : 100);
   }
-  // 読み込みやクラウドからの取り込みが終わるまで、少しずつ待ちながら探す（最大30秒）
+  // 読み込みやクラウドからの取り込みが終わるまで、少しずつ待ちながら探す（最大60秒）
   var tries = 0;
-  var t = setInterval(function(){ tries++; go(); if(found || touched || tries >= 60) clearInterval(t); }, 500);
+  var t = setInterval(function(){ tries++; go(); if(found || touched || tries >= 120) clearInterval(t); }, 500);   // 最大60秒待つ
   document.addEventListener('DOMContentLoaded', go);
   // アドレス欄から ?view=… を消す（更新したときは、ふつうに物件一覧から開く）
-  setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 30000);
+  setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 60000);
 })();
 </script>
 </body>
