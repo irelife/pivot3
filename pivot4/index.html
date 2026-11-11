@@ -1132,5 +1132,27 @@
 (function(){function f(){try{var e=document.querySelector('#pv-side .lg');if(e&&e.firstChild&&e.firstChild.nodeType===3){e.firstChild.nodeValue='PIVOT4 岡山市・赤磐市';}}catch(x){}}
 document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);setTimeout(f,2000);});})();
 </script>
+<!-- LINE の「PIVOT4を開く」ボタン（…/pivot4/?view=contract）で開いたときは、契約（Contract）の画面を出す -->
+<script>
+(function(){
+  var want = '';
+  try{ want = new URLSearchParams(location.search).get('view') || ''; }catch(e){ return; }
+  if(want !== 'contract') return;
+  var touched = false;   // 開いたあと人が画面を触ったら、もう切り替えない
+  document.addEventListener('click', function(){ touched = true; }, true);
+  function go(){
+    if(touched) return;
+    if(typeof window.switchApp !== 'function' || !document.getElementById('tab-kanban')) return false;
+    if(!document.body.classList.contains('tab-kanban')){ try{ window.switchApp('kanban'); }catch(e){} }
+    return true;
+  }
+  // 読み込みやログインが終わるまで少し待ちながら、何度か切り替える
+  var tries = 0;
+  var t = setInterval(function(){ tries++; go(); if(tries >= 20) clearInterval(t); }, 500);
+  document.addEventListener('DOMContentLoaded', go);
+  // アドレス欄から ?view=contract を消す（更新したときは、ふつうに物件一覧から開く）
+  setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 10000);
+})();
+</script>
 </body>
 </html>
