@@ -3004,7 +3004,7 @@
     try{ window.__pvSyncContracts = function(){ _lastCt = 0; syncCts(true); }; }catch(e){}
     /* ★ LINE の「PIVOT4を開く」から来たとき用：
          指定した1枚の契約だけを、クラウドからすぐ読みます。
-         手元にまだ無いカードだけを足します（手元にあるものは触りません）。
+         手元に無いカードは足し、手元にあっても（送っていない直しが無ければ）クラウドの最新にします。
          読み直しの安全装置（入力中・未送信など）を待たずに、その場で出せます。
          新しく足すだけなので、ほかの契約や、まだ送っていない直しには影響しません。 */
     try{ window.__pvFetchContract = function(id){
@@ -3015,8 +3015,15 @@
         if(!doc || !doc.exists) return false;
         var mine = {};
         try{ mine = JSON.parse(localStorage.getItem(ctLS()) || '{}') || {}; }catch(e){ return false; }
-        if(Object.prototype.hasOwnProperty.call(mine, id)) return true;      /* もう手元にある */
         var d = doc.data() || {}, c = ctFrom(d), r = {}, g = {};
+        if(Object.prototype.hasOwnProperty.call(mine, id)){
+          /* もう手元にあるとき：手元に送っていない直しが無く、クラウドのほうが新しければ、
+             クラウドの中身に置き換えます（GAS が審査落ちなどを書いたあと、古いまま見えないように） */
+          var base = readMap(ctSigK()), revs = readMap(ctRevK()), mySig = null;
+          try{ mySig = sig(ctDoc(id, mine[id])); }catch(e){ return true; }
+          if(base[id] === undefined || mySig !== base[id]) return true;      /* 手元で直しかけ → 触りません */
+          if((d.rev || 0) <= (revs[id] || 0)) return true;                   /* 手元が最新 */
+        }
         mine[id] = c;
         try{ localStorage.setItem(ctLS(), JSON.stringify(mine)); }catch(e){ return false; }
         r[id] = d.rev || 0;
@@ -3025,7 +3032,7 @@
         mergeMap(ctSigK(), g);
         try{ if(typeof renderBoard === 'function') renderBoard(); }catch(e){}
         try{ if(typeof renderStats === 'function') renderStats(); }catch(e){}
-        try{ console.log('[E] LINE のリンクの契約を1件読み込みました：' + id); }catch(e){}
+        try{ console.log('[E] LINE のリンクの契約を1件読み込みました（最新にしました）：' + id); }catch(e){}
         return true;
       }).catch(function(){ return false; });
     }; }catch(e){}

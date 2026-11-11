@@ -1121,7 +1121,7 @@
 <script src="../js/mobilesheet.js?v=9"></script>
 <script src="../js/spotcards.js?v=2"></script>
 <script src="../js/swipedel.js?v=1"></script>
-<script src="../js/store.js?v=43"></script>
+<script src="../js/store.js?v=44"></script>
 <script src="../js/realtime.js?v=3"></script>
 <script src="../js/uifix.js?v=28"></script>
 <script src="../js/areaclean.js?v=2"></script>
@@ -1160,11 +1160,12 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
     if(!document.body.classList.contains('tab-kanban')){ try{ window.switchApp('kanban'); }catch(e){} }
     if(!cardId) return;
     var el = document.querySelector('.ct-card[data-id="' + esc(cardId) + '"]');
-    if(!el && !fetched){
+    if(!fetched && typeof window.__pvFetchContract !== 'function') fetched = true;   // 古い読み込みのままなら、そのまま進む
+    if(!fetched){   // 手元にあっても、まずクラウドの最新を1枚読む（審査落ちなどを古いまま見せない）
       // 手元にまだ無いカードは、クラウドからその1枚だけをすぐ読む（ログインが済み次第）
       if(!fetching && Date.now() - lastFetch > 3000 && typeof window.__pvFetchContract === 'function'){
         fetching = true; lastFetch = Date.now();   // 読めなかったときは3秒おきにやり直す
-        window.__pvFetchContract(cardId).then(function(ok){ fetching = false; if(ok){ fetched = true; go(); } });
+        window.__pvFetchContract(cardId).then(function(ok){ fetching = false; if(ok || el){ fetched = true; go(); } });
       }
       return;
     }
