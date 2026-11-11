@@ -1177,7 +1177,15 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
   }
   // 読み込みやクラウドからの取り込みが終わるまで、少しずつ待ちながら探す（最大60秒）
   var tries = 0;
-  var t = setInterval(function(){ tries++; go(); if(found || touched || tries >= 120) clearInterval(t); }, 500);   // 最大60秒待つ
+  var t = setInterval(function(){
+    tries++; go();
+    // カードがまだ手元にないときは、クラウドから契約を取り込み直す（3秒後・10秒後・25秒後）
+    // （この端末が前に読んだあとに GAS が作ったカードは、取り込み直さないと出てこないことがあるため）
+    if(!found && cardId && (tries === 6 || tries === 20 || tries === 50)){
+      try{ if(typeof window.__pvSyncContracts === 'function') window.__pvSyncContracts(); }catch(e){}
+    }
+    if(found || touched || tries >= 120) clearInterval(t);
+  }, 500);   // 最大60秒待つ
   document.addEventListener('DOMContentLoaded', go);
   // アドレス欄から ?view=… を消す（更新したときは、ふつうに物件一覧から開く）
   setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 60000);
