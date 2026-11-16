@@ -1190,5 +1190,47 @@ document.addEventListener('DOMContentLoaded',function(){f();setTimeout(f,500);se
   setTimeout(function(){ try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){} }, 60000);
 })();
 </script>
+<!-- いえらぶの申込画面の「🅿 PIVOT4で区画を押さえる」（拡張機能）から開いたとき（2026/11/16）
+     …/pivot4/?view=contract&ie=いえらぶ申込ID&prop=物件&room=号室&park=P16&pprice=3850&cdate=2026-11-30
+     その申込のカードを探して開き、P区画・駐車場代・契約日を入れる。
+     入れると「この区画に予約として登録しますか？」が出るので、人が OK を押す（自動では予約しない） -->
+<script>
+(function(){
+  var q; try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  if(q.get('view') !== 'contract' || !q.get('park')) return;
+  var ie = q.get('ie') || '', prop = q.get('prop') || '', room = q.get('room') || '';
+  var park = q.get('park') || '', pprice = q.get('pprice') || '', cdate = q.get('cdate') || '';
+  var norm = function(s){ return String(s||'').normalize('NFKC').replace(/[\s　]/g,'').replace(/号室?$/,''); };
+  var tries = 0, done = false;
+  function find(){
+    if(typeof window.loadAll !== 'function') return null;
+    var all = Object.values(window.loadAll() || {});
+    var hit = ie ? all.filter(function(c){ return String(c.memo||'').indexOf('/id/' + ie + '/') >= 0; }) : [];
+    if(!hit.length) hit = all.filter(function(c){ return !c.archived && norm(c.property) === norm(prop) && norm(c.room) === norm(room); });
+    return hit.length === 1 ? hit[0] : (hit.length ? 'many' : null);
+  }
+  function setVal(id, v){ var el = document.getElementById(id); if(!el || !v) return; el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }
+  function go(){
+    if(done) return;
+    tries++;
+    var c = find();
+    if(!c){ if(tries > 60){ done = true; alert('PIVOT4に、この申込（' + prop + ' ' + room + '）のカードが見つかりません。\nカードを開いて、P区画を手で入れてください。'); } return; }
+    done = true;
+    if(c === 'many'){ alert('同じ部屋のカードが複数あります（' + prop + ' ' + room + '）。\n正しいカードを開いて、P区画「' + park + '」を手で入れてください。'); return; }
+    try{ if(typeof window.switchApp === 'function') window.switchApp('kanban'); }catch(e){}
+    setTimeout(function(){
+      try{ window.KB.openSheet(c.id); }catch(e){ alert('カードを開けませんでした。'); return; }
+      setTimeout(function(){
+        setVal('f-parking', park);
+        if(pprice) setVal('f-parkingPrice', pprice);
+        var cd = document.getElementById('f-contractDate');
+        if(cd && !cd.value && cdate) setVal('f-contractDate', cdate);
+        try{ if(typeof window.autoSave === 'function') window.autoSave(); }catch(e){}
+      }, 800);
+    }, 600);
+  }
+  var t = setInterval(function(){ go(); if(done) clearInterval(t); }, 500);
+})();
+</script>
 </body>
 </html>
