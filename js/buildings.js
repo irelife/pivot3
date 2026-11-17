@@ -1261,6 +1261,8 @@ function generateKeiyakuPrint(data){
     'html,body{margin:0;padding:0;}' +
     'body{font-family:"MS Mincho","Yu Mincho",serif;font-size:12.5pt;color:#000;line-height:1.7;margin:0;}' +
     '.sheet{width:100%;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid;overflow:hidden;}' +
+    /* ★2026/11/17 1枚に収めるときの、縮小の起点 */
+    '.sheet{transform-origin:top left;}' +
     '@media print{.sheet{page-break-after:avoid;break-after:avoid;} .sheet *{page-break-inside:avoid;}}' +
     '.title{font-size:26pt;text-align:center;font-weight:700;letter-spacing:14px;margin:8px 0 40px 0;}' +
     '.cols{display:grid;grid-template-columns:1fr 1fr;gap:12mm;}' +
@@ -1357,13 +1359,39 @@ function generateKeiyakuPrint(data){
       '</div>' +
     '</div>' +
     '<scr'+'ipt>' +
+    /* ★2026/11/17 1枚に収める。
+         特約事項を足すと、文字の量しだいで A3 1枚に入らなくなります。
+         入らないときだけ、入るまで少しずつ小さくします（最小 70%）。
+         70% でも入らないときは、無理に切らず 2枚目へ送ります。
+         文字を切って読めなくするより、2枚になるほうが安全だからです。 */
+    'function fitOnePage(){' +
+      'var sh = document.querySelector(".sheet");' +
+      'if(!sh) return 1;' +
+      'sh.style.zoom = "";' +
+      'var probe = document.createElement("div");' +
+      'probe.style.cssText = "position:absolute;left:-9999px;top:0;width:1mm;height:283mm;";' +
+      'document.body.appendChild(probe);' +
+      'var have = probe.offsetHeight;' +
+      'probe.parentNode.removeChild(probe);' +
+      'if(!have) return 1;' +
+      'var z = 1;' +
+      'for(var i = 0; i < 20; i++){' +
+        'if(sh.getBoundingClientRect().height <= have) break;' +
+        'z = Math.round((z - 0.02) * 100) / 100;' +
+        'if(z < 0.70){ z = 0.70; sh.style.zoom = z; break; }' +
+        'sh.style.zoom = z;' +
+      '}' +
+      'return z;' +
+    '}' +
+    'window.addEventListener("beforeprint", fitOnePage);' +
     'window.addEventListener("load", function(){' +
+      'fitOnePage();' +
       'var imgs = document.querySelectorAll("img");' +
-      'if(imgs.length === 0){ setTimeout(function(){window.print();}, 200); return; }' +
+      'if(imgs.length === 0){ setTimeout(function(){ fitOnePage(); window.print(); }, 200); return; }' +
       'var loaded = 0, total = imgs.length;' +
-      'var checkDone = function(){ loaded++; if(loaded >= total){ setTimeout(function(){window.print();}, 300); } };' +
+      'var checkDone = function(){ loaded++; if(loaded >= total){ setTimeout(function(){ fitOnePage(); window.print(); }, 300); } };' +
       'imgs.forEach(function(img){ if(img.complete){ checkDone(); } else{ img.addEventListener("load", checkDone); img.addEventListener("error", checkDone); } });' +
-      'setTimeout(function(){ if(loaded < total){ window.print(); } }, 3000);' +
+      'setTimeout(function(){ if(loaded < total){ fitOnePage(); window.print(); } }, 3000);' +
     '});' +
     '<\/scr'+'ipt>' +
     '<\/body><\/html>';
