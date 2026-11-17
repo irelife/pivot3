@@ -1182,8 +1182,14 @@ function printKeiyaku(){
     periodFrom: periodFrom,
     periodTo: periodTo,
     contractDate: document.getElementById('ky-contract-date').value,
-    /* ★2026/11/17 支払い方法（口座振替／振込）。
-         古い画面にはこの欄が無いので、無ければ これまでどおり「口座振替」にします。 */
+    /* ★2026/11/17 支払日（27日／末日）と 支払い方法（口座振替／振込）。
+         古い画面にはこの欄が無いので、無ければ これまでどおり
+         「毎月27日」「口座振替」にします。 */
+    payDay: (function(){
+      var el = document.getElementById('ky-pay-day');
+      var v = el ? String(el.value || '').trim() : '';
+      return v || '27日';
+    })(),
     payMethod: (function(){
       var el = document.getElementById('ky-pay-method');
       var v = el ? String(el.value || '').trim() : '';
@@ -1263,7 +1269,7 @@ function generateKeiyakuPrint(data){
             '専用区画1台「' + escapeHtml(data.spotNo) + '」' +
           '</div>' +
           '<div class="clause-title">賃料：第2条</div>' +
-          '<p class="clause-body">賃料は月額金 ' + formatYen(price) + ' 円(消費税率' + taxRate + '%、うち消費税' + formatYen(taxAmount) + '円)とし、毎月27日に翌月分を' + escapeHtml(data.payMethod || '口座振替') + 'にて支払うものとする。</p>' +
+          '<p class="clause-body">賃料は月額金 ' + formatYen(price) + ' 円(消費税率' + taxRate + '%、うち消費税' + formatYen(taxAmount) + '円)とし、毎月' + escapeHtml(data.payDay || '27日') + 'に翌月分を' + escapeHtml(data.payMethod || '口座振替') + 'にて支払うものとする。</p>' +
           '<div class="clause-title">賃貸借期間：第3条</div>' +
           '<p class="clause-body">本契約の有効期間は、' + fmtJp(data.periodFrom) + 'から' + fmtJp(data.periodTo) + 'までの満2年間とする。<br>' +
           '前項の期間満了1ヶ月前迄に甲または乙どちらかの相手方に対する解約の申し入れがない場合は、自動的に同条件にて2年間契約を更新し、以後も同様とする。</p>' +
