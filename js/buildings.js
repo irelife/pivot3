@@ -1124,6 +1124,30 @@ function openKeiyakuModal(spotIdx){
   document.getElementById('ky-period-from').value = isoDate(today);
   const to = new Date(today); to.setFullYear(to.getFullYear()+2); to.setDate(to.getDate()-1);
   document.getElementById('ky-period-to').value = isoDate(to);
+  /* ★2026/11/17 特約事項の追記。
+       居室の契約が終わったら、駐車場の契約も当然に終わる、という特約です。
+       （居室だけ解約して、駐車場に居座られるのを防ぐためのもの）
+       号室が分かるときだけ、はじめから入れておきます。
+       号室の無い区画（月極だけのお客様など）には、入れません。 */
+  try{
+    var _tk = document.getElementById('ky-tokuyaku');
+    if(_tk){
+      var _kRm = (spot.room || spot.res_room || '');
+      if(_kRm){
+        var _kBld = bld.name || '';
+        _tk.value =
+          '本契約は、賃借人が賃借する【' + _kBld + '】【' + _kRm + '】号室に係る賃貸借契約' +
+          '（以下「居室契約」という。）に付随するものとする。\n' +
+          '本契約の契約期間及び解約予告期間の定めにかかわらず、居室契約が期間満了、解約、' +
+          '解除その他の事由により終了したときは、本契約も、別途の通知又は解約手続を要する' +
+          'ことなく、居室契約の終了日と同日に当然に終了する。\n' +
+          '前項により本契約が終了する場合、賃借人は、居室契約の終了日までに車両及び私物を' +
+          '撤去し、本駐車区画を賃貸人に明け渡すものとする。';
+      }else{
+        _tk.value = '';
+      }
+    }
+  }catch(e){}
   document.getElementById('keiyaku-modal').classList.add('active');
 }
 
@@ -1185,6 +1209,14 @@ function printKeiyaku(){
     /* ★2026/11/17 支払日（27日／末日）と 支払い方法（口座振替／振込）。
          古い画面にはこの欄が無いので、無ければ これまでどおり
          「毎月27日」「口座振替」にします。 */
+    /* ★2026/11/17 特約事項の追記。1行＝1項目。空の行は飛ばします。 */
+    tokuyaku: (function(){
+      var el = document.getElementById('ky-tokuyaku');
+      if(!el) return [];
+      return String(el.value || '').split(/\r?\n/)
+        .map(function(x){ return x.trim(); })
+        .filter(function(x){ return x; });
+    })(),
     payDay: (function(){
       var el = document.getElementById('ky-pay-day');
       var v = el ? String(el.value || '').trim() : '';
@@ -1302,6 +1334,11 @@ function generateKeiyakuPrint(data){
             '<li>乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。</li>' +
             '<li>賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。</li>' +
             '<li>甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。</li>' +
+            /* ★2026/11/17 画面の「特約事項の追記」。4番目から続きます。
+                 空なら、何も足しません（これまでと同じ3項目のままです）。 */
+            (data.tokuyaku || []).map(function(t){
+              return '<li>' + escapeHtml(t) + '</li>';
+            }).join('') +
           '</ol></div>' +
           '<p class="tail-text">以上のとおり契約が成立したことを証するため、本書2通を作成し、甲乙各自署名のうえ、甲乙各自その1通を保有する。</p>' +
           '<p style="text-align:right;font-size:9.5pt;margin:8px 0 4px;">' + contractDateJp + '</p>' +
