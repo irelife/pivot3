@@ -156,11 +156,38 @@
     }, 700);
   }
 
+  /* ★2026/11/19 見張りを眠らせる仕掛け。
+       PIVOT4 は「ログインを切らない」ようにしたため、画面を開けっぱなしに
+       したまま夜を越すことがあります。見張りをつけたままだと、
+       2026/09/06 と同じく Firestore の1日の回数を使い切って
+       保存が止まります。そこで、長く放っておかれたら見張りだけ外し、
+       操作が戻ったら付け直します。ログインはそのままです。 */
+  var unsub = null;
+  var asleep = false;
+
+  function sleepListener(){
+    if(asleep) return;
+    asleep = true;
+    try{ if(unsub) unsub(); }catch(e){}
+    unsub = null;
+    started = false;
+    try{ console.log('[RT] 見張りを眠らせました（ログインはそのままです）'); }catch(e){}
+  }
+
+  function wakeListener(){
+    if(!asleep) return;
+    asleep = false;
+    startListener();
+    /* 眠っているあいだの変更を、1回だけ取り込みます */
+    schedulePull('wake');
+    try{ console.log('[RT] 見張りを戻しました'); }catch(e){}
+  }
+
   function startListener(){
-    if(started || stopped) return;
+    if(started || stopped || asleep) return;
     started = true;
 
-    bell.onSnapshot(function(snap){
+    unsub = bell.onSnapshot(function(snap){
       hit('bellEvents');
 
       var d = snap.exists ? (snap.data() || {}) : {};
@@ -185,7 +212,7 @@
   }
 
   function fallbackCheck(){
-    if(stopped) return;
+    if(stopped || asleep) return;   /* ★2026/11/19 眠っているあいだは読みません */
     bell.get({source:'server'}).then(function(snap){
       hit('fallbackReads');
 
@@ -241,6 +268,10 @@
   try{
     window.__pvRealtime = {
       stop:function(){ stopped = true; },
+      /* ★2026/11/19 core.js の自動ログアウトの代わりに呼ばれます */
+      sleep:sleepListener,
+      wake:wakeListener,
+      isAsleep:function(){ return asleep; },
       /* ★ 保存のたびに鳴らす窓口。store.js から呼ばれます。
          realtime.js 自身も postToGas のあとに ring() を呼ぶので、
          ここを ringNow（すぐ鳴らす）にすると 1回の保存で2回鳴ってしまいます。

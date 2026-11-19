@@ -472,7 +472,9 @@ window.addEventListener('DOMContentLoaded', () => {
           if(_booted) return;
           if(user && user.email){
             // 自動入室の前に「1時間経過/日付変更」をチェック。期限切れなら再ログイン。
-            if(isSessionExpired()){
+            /* ★2026/11/19 PIVOT4 は期限で切らないので、ここでも追い出しません。
+                 （NO_AUTO_LOGOUT は下のほうで決めています。var なので先に読めます） */
+            if(!NO_AUTO_LOGOUT && isSessionExpired()){
               _booted = true;
               try{ firebase.auth().signOut(); }catch(e){}
               try{ localStorage.removeItem(LS_LASTSEEN); }catch(e){}
@@ -556,6 +558,8 @@ const LS_LASTSEEN = insPrefix() + 'lastseen_v1';
 //   いえらぶ・アットホームと同じ考え方で、放置したら切れるように戻します。
 //   2時間にしたのは、昼休みや短い外出ではログアウトされないようにするためです。
 //   日付が変わると切れる決まりは、これまでどおり残してあります。）
+//   ★2026/11/19 PIVOT4 だけ、この時間でログアウトはしません。
+//   代わりに Firestore の見張りを眠らせます（下の NO_AUTO_LOGOUT）。
 const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;   // 2時間
  
 // 最終操作時刻と日付を記録
@@ -577,21 +581,52 @@ function isSessionExpired(){
   return false;
 }
  
+/* ★2026/11/19 PIVOT4 だけ、ログインを切らないようにしました。
+     PIVOT4 は一日のあいだ開けっぱなしで使うため、2時間で切れると
+     そのたび打ち直しになります。
+     ただし、ただ止めるだけだと 2026/09/06 と同じ事故（画面を開けたまま
+     夜を越し、Firestore の1日の読み取り回数を使い切って保存が止まる）に
+     戻ってしまいます。
+     そこで PIVOT4 では、期限が来たらログアウトする代わりに
+     「Firestore の見張りだけ眠らせる」ことにしました。
+     操作が戻ったら、見張りを付け直して1回だけ読み直します。
+     PIVOT2・PIVOT3 は、これまでどおりログアウトします。 */
+var NO_AUTO_LOGOUT = false;
+try{ NO_AUTO_LOGOUT = (insPrefix() === 'pivot4_'); }catch(e){}
+
+function rtSleep(){
+  try{ if(window.__pvRealtime && window.__pvRealtime.sleep) window.__pvRealtime.sleep(); }catch(e){}
+}
+function rtWake(){
+  try{ if(window.__pvRealtime && window.__pvRealtime.wake) window.__pvRealtime.wake(); }catch(e){}
+}
+
 // 期限切れならログアウトしてログイン画面へ
 function checkAutoLogout(){
   if(!_pivotCurrentUser) return;          // 未ログインなら何もしない
-  if(isSessionExpired()){
-    _pivotCurrentUser = '';
-    try{ updateLoginUserLabel(); }catch(e){}
-    try{ if(_firebaseReady && firebase.auth){ firebase.auth().signOut(); } }catch(e){}
-    try{ localStorage.removeItem(LS_LASTSEEN); }catch(e){}
-    if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
+  if(!isSessionExpired()){
+    if(NO_AUTO_LOGOUT) rtWake();          // 使われているあいだは見張りを付けておく
+    return;
   }
+  if(NO_AUTO_LOGOUT){
+    rtSleep();                            // ログインは切らず、見張りだけ眠らせます
+    return;
+  }
+  _pivotCurrentUser = '';
+  try{ updateLoginUserLabel(); }catch(e){}
+  try{ if(_firebaseReady && firebase.auth){ firebase.auth().signOut(); } }catch(e){}
+  try{ localStorage.removeItem(LS_LASTSEEN); }catch(e){}
+  if(typeof showLoginScreen === 'function'){ showLoginScreen(); }
 }
  
 // 操作のたびに最終操作時刻を更新(ログイン中のみ)
 ['click','keydown','scroll','touchstart','mousemove'].forEach(function(ev){
-  try{ document.addEventListener(ev, function(){ if(_pivotCurrentUser) markActivity(); }, { passive:true }); }catch(e){}
+  try{ document.addEventListener(ev, function(){
+    if(!_pivotCurrentUser) return;
+    markActivity();
+    /* ★2026/11/19 PIVOT4 は、操作が戻ったらすぐ見張りを付け直します */
+    if(NO_AUTO_LOGOUT) rtWake();
+  }, { passive:true }); }catch(e){}
 });
 // 1分ごと、およびタブに戻ったときに期限をチェック
 try{ setInterval(checkAutoLogout, 60 * 1000); }catch(e){}
