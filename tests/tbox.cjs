@@ -142,8 +142,18 @@ let P=0,F=0; const ok=(n,c,x)=>{ if(c){P++;console.log('  ✅ '+n);} else {F++;c
  GASOK=false;
  await pg.evaluate(()=>{ try{ window.__fsPrimary = false; }catch(e){} });
  await pg.reload();
- await until(pg, ()=>!!window.__fsPrimary, 25000);
- ok('★★ Firestore が「正」の旗が立っている（uifix の古い合体を止める）', (await fsp())===true, await fsp());
+ /* ★2026/11/19 ここは、ときどき失敗します（全検査の中で走らせたときだけ）。
+      落ちた理由が分からないままだったので、分かるようにしました。
+      ・旗は1回だけ読みます。これまでは2回読んでいて、
+        「くらべた値」と「画面に出す値」が別の読み取りでした。
+        旗が途中で変わると、どちらを見ているのか分からなくなります。
+      ・25秒待てたのか、何ミリ秒で立ったのかも、いっしょに出します。
+      ゆるめてはいません。旗が true でなければ、これまでどおり失敗します。 */
+ const _t0 = Date.now();
+ const _hit = await until(pg, ()=>!!window.__fsPrimary, 25000);
+ const _fp  = await fsp();
+ ok('★★ Firestore が「正」の旗が立っている（uifix の古い合体を止める）', _fp===true,
+    { 待てた:_hit, 待ちms:(Date.now()-_t0), 旗:_fp });
  ok('★ 物件が20件のまま', (await nb())===20, await nb());
  ok('★ 区画が消えていない（40個）', (await nsp())===40, await nsp());
  ok('★ 「クラウドから届いたデータのほうが少ない」と言われない',
