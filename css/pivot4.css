@@ -1,0 +1,40 @@
+/* ============================================================
+   PIVOT4 だけの上書き            pivot4.css  2026-11-20
+
+   このファイルは pivot4/index.html からだけ読んでいます。
+   PIVOT3（/pivot3/）と PIVOT2 には読まれません。
+
+   ① 契約カードの「×（削除）」を、スマホでも いつも出す
+      もとの決まり
+        ・パソコン … カードにマウスを乗せたときだけ出る（22px）
+        ・スマホ   … css/swipe-del.css が ×を隠して、
+                     左スワイプで「削除」を出す作りにしている
+      スマホでは指を乗せるという動きが無いので、×が一度も出ません。
+      左スワイプを知らないと、消すことができません。
+      そこで PIVOT4 では、×を いつも・大きく 出します。
+      （左スワイプは、これまでどおり使えます。どちらでも消せます）
+   ============================================================ */
+
+/* ---- 契約カードの × ---- */
+#kb-view .ct-card-del,
+.ct-card-del{
+  display:flex !important;
+  opacity:1 !important;
+  width:38px; height:38px;
+  top:5px; left:5px;
+  font-size:24px; font-weight:700;
+  background:rgba(20,20,23,.58);
+  box-shadow:0 1px 4px rgba(0,0,0,.28);
+  /* 指で押せる幅を確保します（見た目は38pxのまま） */
+  -webkit-tap-highlight-color:transparent;
+}
+#kb-view .ct-card-del:active{ background:#e60012; }
+#kb-view .ct-card-del:hover{ background:#e60012; }
+
+/* ×のぶん、左上の「個人／AD」を右へずらして、かぶらないようにします */
+#kb-view .ct-head-left{ padding-left:44px; }
+
+/* せまい画面では、カードの上の段が低いので、少しだけ下げます */
+@media (max-width:760px){
+  #kb-view .ct-head{ min-height:38px; }
+}
