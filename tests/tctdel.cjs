@@ -74,24 +74,28 @@ let P=0,F=0; const ok=(n,c,x)=>{ if(c){P++;console.log('  ✅ '+n);} else {F++;c
  const BP = pre.replace(/_+$/,'') + '/data/buildings';
  if(WITH_BLD){
    SHEET.buildings = { b1:{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1', spots:{} } };
-   await pg.evaluate((a)=>{
-     window.__seed(a[0],'b1',{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1',
-       spots:{}, rev:1, updatedAt:'2026-11-01T00:00:00.000Z', updatedBy:'x' });
-   }, [BP]);
  }
  console.log('   物件：' + (WITH_BLD ? 'あり（1件）' : 'なし（0件）'));
 
- /* クラウド（Firestore）に契約6件 */
+ /* ★ にせクラウドの中身は sessionStorage に控えます。
+      その控えは、画面を読み込んだときに1回だけ読み出されます。
+      ですから「入れてから読み込み直す」と、混んでいるときに
+      前の画面の書き込みと新しい画面の読み出しがぶつかり、
+      入れたはずの6件が消えることがあります（2026/11/20）。
+      読み込み直したあとに入れて、そのまま取り込ませます。     */
+ await pg.reload(); await pg.waitForTimeout(3000);
  await pg.evaluate((a)=>{
+   if(a[2]){
+     window.__seed(a[1],'b1',{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1',
+       spots:{}, rev:1, updatedAt:'2026-11-01T00:00:00.000Z', updatedBy:'x' });
+   }
    for(var i=1;i<=6;i++){
      window.__seed(a[0],'c'+i,{ id:'c'+i, property:'物件'+i, room:'10'+i,
        contractor:'契約者'+i, status:'申込', rev:1, updatedAt2:'2026-11-01T00:00:00.000Z' });
    }
- }, [CT]);
- /* にせクラウドの中身は sessionStorage に控えます。
-    書き終わる前に読み込み直すと、まれに消えます。少し待ちます。 */
- await pg.waitForTimeout(600);
- await pg.reload(); await pg.waitForTimeout(Number(process.env.PV_WAIT||6000));
+ }, [CT, BP, WITH_BLD]);
+ await pg.evaluate(()=>{ try{ window.forcePullLatest(); }catch(e){} });
+ await pg.waitForTimeout(Number(process.env.PV_WAIT||7000));
 
  const nLocal = ()=>pg.evaluate((k)=>{ try{ return Object.keys(JSON.parse(localStorage.getItem(k)||'{}')).length; }catch(e){ return -1; } }, LS);
  const hasLocal = (id)=>pg.evaluate((a)=>{ try{ return !!JSON.parse(localStorage.getItem(a[0])||'{}')[a[1]]; }catch(e){ return false; } }, [LS,id]);
@@ -127,7 +131,38 @@ let P=0,F=0; const ok=(n,c,x)=>{ if(c){P++;console.log('  ✅ '+n);} else {F++;c
  ok('★★ 開き直しても c3 は戻らない', (await hasLocal('c3'))===false, await nLocal());
  ok('★★ ほかの5件は残っている', (await nLocal())===5, await nLocal());
 
- console.log('\n❻ 画面のエラー');
+ /* ---- ★ 2台めの端末（版番号を控えていない）が、書き戻さないか ---- */
+ console.log('\n❻ ★★ 古いままの2台めが、消した契約を書き戻さない');
+ /* 2026/11/20 ロムさんの PC と同じ形を作ります。
+      ・手元の契約表には c3 が残っている
+      ・版番号も指紋も控えていない（物件0件の端末は、こうなっていました）
+      ・消した印の写しも持っていない
+    この端末が読み直したとき、c3 を「自分の作りたて」と誤解して
+    クラウドへ書き戻すと、消したはずの契約が全員に戻ります。      */
+ await pg.evaluate((a)=>{
+   var LS = a[0], pre = a[1];
+   var m = {}; try{ m = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ m = {}; }
+   m['c3'] = { id:'c3', property:'物件3', room:'103', contractor:'契約者3', status:'申込' };
+   localStorage.setItem(LS, JSON.stringify(m));
+   var rev = {}, sg = {};
+   try{ rev = JSON.parse(localStorage.getItem(pre+'fs_ct_rev')||'{}'); }catch(e){}
+   try{ sg  = JSON.parse(localStorage.getItem(pre+'fs_ct_sig')||'{}'); }catch(e){}
+   delete rev['c3']; delete sg['c3'];
+   localStorage.setItem(pre+'fs_ct_rev', JSON.stringify(rev));
+   localStorage.setItem(pre+'fs_ct_sig', JSON.stringify(sg));
+   localStorage.removeItem(pre+'fs_ct_gone');     /* 印の写しも持っていない */
+ }, [LS, pre]);
+ ok('★ 2台めの形を作れた（c3 が手元に戻っている）', (await hasLocal('c3'))===true);
+
+ await pg.reload(); await pg.waitForTimeout(8000);
+ await pg.evaluate(()=>{ try{ if(typeof window.__pushNow==='function') window.__pushNow(); }catch(e){} });
+ await pg.waitForTimeout(6000);
+
+ ok('★★ 2台めの手元からも c3 が消えた', (await hasLocal('c3'))===false, await nLocal());
+ ok('★★ クラウドへ書き戻していない',   (await hasCloud('c3'))===false);
+ ok('★★ 控えの表へも書き戻していない', !SHEET.contracts['c3'], Object.keys(SHEET.contracts));
+
+ console.log('\n❼ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);
 
  const hint = (process.env.PV_ALLLOG==='1') ? logs.slice(-60) : logs.filter(l=>/契約|削除|保存|止め/.test(l)).slice(-12);

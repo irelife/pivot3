@@ -575,13 +575,35 @@
     });
   }
 
+  /* ★2026/11/20 消した印を、画面を開いたときに1回だけ受け取ります。
+   *
+   *  ふだんの見回り（__pvSyncNow）は「目印」をもともと読んでいるので、
+   *  そちらでは増えません（delChanged で相乗りしています）。
+   *  増えるのは、画面を開いた1回だけです。
+   *  ここで受け取っておかないと、古いままの端末が
+   *  「消された契約」を「自分の作りたて」と誤解して書き戻します。 */
+  var _goneOnce = false;
+  function ctGoneOnce(){
+    if(_goneOnce) return Promise.resolve(null);
+    _goneOnce = true;
+    try{
+      return metaRef().get().then(function(d){
+        use('read', 1, '消した印を受け取る（開いたとき1回だけ）');
+        var dd = {};
+        try{ dd = (d && d.exists && (d.data() || {})) || {}; }catch(e){ dd = {}; }
+        ctGoneMerge(dd.ctGone || {});
+        return null;
+      }, function(){ return null; });
+    }catch(e){ return Promise.resolve(null); }
+  }
+
   function onLoad(P, url, body, t){
     if(preCheck()){
       var lite = onLoadLight(P, url, body, t);
       if(lite) return lite;
     }
     var gas = Promise.resolve(P(url, body, t)).catch(function(e){ return { ok:false, message:String(e && e.message || e) }; });
-    return Promise.all([gas, fsTriple()]).then(function(a){
+    return Promise.all([gas, fsTriple(), ctGoneOnce()]).then(function(a){
       var r = a[0], fs = a[1][0], cts = a[1][1], ows = a[1][2];
       _fsReadOk = !!(fs && count(fs.buildings) > 0);
       /* ★ v25）「読めたか」と「中身があったか」は、別のことです。
@@ -1201,12 +1223,17 @@
       revs[id] = cs.revs[id];
       sigs[id] = cs.sigs[id];
     }
+    /* ★2026/11/20 消した印のあるものは、手元に残しません。
+         版番号を控えていない端末でも、これで見分けがつきます。 */
+    var gone = ctGoneRead(), zomb = 0;
     for(id in mine){
       if(!has(mine, id) || has(out, id)) continue;
       if(oldS[id] !== undefined) continue;     /* 前はクラウドにあった → 消されたので足しません */
+      if(gone[id] !== undefined){ zomb++; continue; }   /* ★ 消した印あり → 足しません */
       out[id] = mine[id];                      /* 一度も送っていない、新しい契約 */
       kept++;
     }
+    if(zomb){ try{ console.log('[E] 消した印のある契約 ' + zomb + ' 件は、手元にも戻しませんでした'); }catch(e){} }
     if(kept){ try{ console.log('[E] まだ送っていない契約の直し ' + kept + ' 件は、手元を残しました'); }catch(e){} }
     if(broke){
       try{ console.warn('[E] 中身が空になっていた契約 ' + broke + ' 件は、クラウドから戻しました'); }catch(e){}
@@ -1886,6 +1913,71 @@
   function owRef(){ return db().collection(INS).doc('data').collection('misc').doc('owners'); }
   function ctRevK(){ return pfx() + 'fs_ct_rev'; }
   function ctSigK(){ return pfx() + 'fs_ct_sig'; }
+
+  /* ★★ 2026/11/20）「消した印」（墓標）
+   *
+   *  2台で使っていると、こうなっていました。
+   *    ・A（スマホ）で契約を消す → クラウドからも消える
+   *    ・B（PC）は、その契約の版番号を控えていない
+   *    ・B は「クラウドに無い＝自分が作った、まだ送っていない契約」と読む
+   *    ・B が手元に残して、クラウドへ書き戻す
+   *    ・A に戻ってくる
+   *  何度消しても戻るのは、これです（2026/11/20 ロムさん）。
+   *
+   *  「クラウドに無い」だけでは、
+   *    「消されたもの」と「まだ送っていないもの」が見分けられません。
+   *  そこで、消したときに印を残します。印があるものは、
+   *  版番号を控えていない端末でも「消されたもの」と分かります。
+   *
+   *  ・クラウドに1枚だけ置きます（misc/ct_deleted）。読みは1回ぶんです。
+   *  ・手元にも写しを持ちます（読み込みのたびに合わせます）。
+   *  ・60日より古い印は、書くときに捨てます。
+   *  ・クラウドにその契約がまた現れたら（GASの作り直しなど）、
+   *    クラウドのほうが勝ちます。印は邪魔をしません。            */
+  function ctGoneK(){ return pfx() + 'fs_ct_gone'; }
+  /* ★ 置き場は「消したことの目印」（misc/meta）の中です。
+       わざわざ別の1枚にすると、画面を開くたびの読み取りが
+       4回から5回に増えます。2026/09/06 に枠を使い切った件があるので、
+       読み取りは増やしません。目印は、もともと毎回読んでいます。 */
+  var CT_GONE_DAYS = 60;
+
+  function ctGoneRead(){
+    var m = readMap(ctGoneK());
+    return (m && typeof m === 'object') ? m : {};
+  }
+  function ctGoneMerge(ids){
+    if(!ids) return;
+    var m = ctGoneRead(), k, n = 0;
+    for(k in ids){
+      if(!Object.prototype.hasOwnProperty.call(ids, k)) continue;
+      if(m[k] === undefined){ m[k] = ids[k]; n++; }
+    }
+    if(n) writeMap(ctGoneK(), m);
+  }
+  function ctGonePrune(m){
+    var lim = new Date(Date.now() - CT_GONE_DAYS * 86400000).toISOString(), out = {}, k;
+    for(k in m){
+      if(!Object.prototype.hasOwnProperty.call(m, k)) continue;
+      if(String(m[k] || '') >= lim) out[k] = m[k];
+    }
+    return out;
+  }
+  /* 消したことを、手元とクラウドの両方に印として残します */
+  function ctGoneMark(ids){
+    if(!ids || !ids.length) return Promise.resolve(null);
+    var at = new Date().toISOString(), add = {}, i;
+    for(i = 0; i < ids.length; i++) add[ids[i]] = at;
+    var m = ctGonePrune(ctGoneRead());
+    for(i = 0; i < ids.length; i++) m[ids[i]] = at;
+    writeMap(ctGoneK(), m);
+    try{
+      return metaRef().set({ ctGone:m, ctGoneAt:at }, { merge:true })
+        .then(function(){ return null; }, function(e){
+          try{ console.warn('[E] 消した印をクラウドへ書けませんでした', e); }catch(x){}
+          return null;
+        });
+    }catch(e){ return Promise.resolve(null); }
+  }
   function owRevK(){ return pfx() + 'fs_ow_rev'; }
   /* ★ オーナー：前に読んだクラウドの中身を、そのまま控えておきます。
        これがないと「この端末で直したもの」と「ほかの端末で直されたもの」を
@@ -2204,8 +2296,12 @@
   function planCts(map){
     var revs = readMap(ctRevK()), sigs = readMap(ctSigK());
     var changed = [], removed = [], hollow = [], id, d, s;
+    /* ★2026/11/20 消した印があって、版番号も知らないものは、
+         ほかの端末が消した契約の残りです。送り返しません。 */
+    var gone = ctGoneRead(), zomb = 0;
     for(id in map){
       if(!Object.prototype.hasOwnProperty.call(map, id)) continue;
+      if(gone[id] !== undefined && revs[id] === undefined){ zomb++; continue; }
       d = ctDoc(id, map[id]); s = sig(d);
       /* ★ v28）中身が空になった契約は、送りません */
       if(revs[id] !== undefined && !ctBody(map[id])){ hollow.push(id); continue; }
@@ -2227,6 +2323,7 @@
     if(hollow.length){
       try{ console.warn('[E] 中身が空になった契約 ' + hollow.length + ' 件は送りませんでした', hollow); }catch(e){}
     }
+    if(zomb){ try{ console.warn('[E] 消した印のある契約 ' + zomb + ' 件は、送り返しませんでした'); }catch(e){} }
     return { changed:changed, removed:removed, hollow:hollow };
   }
 
@@ -2307,6 +2404,13 @@
           else { revs[js[i].id] = js[i].base + 1; sigs[js[i].id] = js[i].sig; }
         }
         writeMap(ctRevK(), revs); writeMap(ctSigK(), sigs);
+        /* ★2026/11/20 消したことを、印として残します。
+             ほかの端末（版番号を控えていない端末）が書き戻すのを止めます。 */
+        try{
+          var _del = [];
+          for(i = 0; i < js.length; i++){ if(js[i].kind === 'del') _del.push(js[i].id); }
+          if(_del.length) ctGoneMark(_del);
+        }catch(e){}
         try{ console.log('[E] 契約：更新 ' + pl.changed.length + ' 件 / 削除 ' + pl.removed.length + ' 件'); }catch(e){}
         jobs = js;
         return js;
@@ -2892,14 +2996,19 @@
     function delChanged(){
       return metaRef().get().then(function(d){
         use('read', 1, '消したことの目印を見る');
-        var at = '';
-        try{ at = String((d.exists && (d.data() || {}).delAt) || ''); }catch(e){ at = ''; }
+        var dd = {};
+        try{ dd = (d.exists && (d.data() || {})) || {}; }catch(e){ dd = {}; }
+        /* ★2026/11/20 消した契約の印も、ここでいっしょに受け取ります。
+             別の1枚にすると読み取りが増えるので、同じ目印に相乗りします。 */
+        try{ ctGoneMerge(dd.ctGone || {}); }catch(e){}
+        var at = String(dd.delAt || '');
+        var ga = String(dd.ctGoneAt || '');
         var had = '';
         try{ had = String(localStorage.getItem(delKey()) || ''); }catch(e){ had = ''; }
         /* まだ誰も消していないときは「-」を控えます。
            そうしておかないと「一度も見ていない」と「見たが空だった」を
            見分けられず、はじめの1回の削除を取りこぼします。 */
-        var cur = at || '-';
+        var cur = (at || '-') + '|' + (ga || '-');
         if(cur === had) return false;
         try{ localStorage.setItem(delKey(), cur); }catch(e){}
         if(!had) return false;        /* はじめの1回は、ものさしを合わせるだけ */
