@@ -693,7 +693,21 @@
 
       if(!fs) return r;                                   /* Firestore が読めない → 従来どおり */
       var n = count(fs.buildings);
-      if(n === 0) return r;                               /* 移行前 → 従来どおり */
+      /* ★★ 2026/11/20）物件がまだ1件も無くても、契約とオーナーは
+       *     Firestore を「正」にします。
+       *
+       *  これまでは、ここで何もせずに引き返していました（移行前あつかい）。
+       *  すると、こうなっていました。
+       *    ・契約の版番号が、手元に控えられない
+       *    ・uifix.js の「両方を残す」古い合体が動いたままになる
+       *  そのため契約の × を押しても、
+       *    手元からは消える → クラウドには残る → すぐ戻ってくる
+       *  となっていました。PIVOT4（物件まだ0件）で 2026/11/20 に
+       *  ロムさんが見つけた症状です。
+       *
+       *  物件のほうは、これまでどおり触りません（本当に移行前なので）。
+       *  tests/tctdel.cjs が、物件0件のときも見張ります。          */
+      var noBld = (n === 0);
       /* ★ スプレッドシート（GAS）が失敗したかどうかを、旗にして持ちます。
            これまではここで引き返していました。すると Firestore は読めているのに
            _loaded が false のままになり、その端末は
@@ -703,14 +717,17 @@
            契約・オーナーだけは、r.payload が空で返って消えるのを防ぐため、
            これまでどおり触りません。 */
       var gasOk = !!(r && r.ok && r.payload);
+      var ad = null;
       var localN = 0;
+      if(!noBld){
+      /* ↓ ここから、物件があるときだけの処理です */
       try{ localN = count((typeof pbLoadAll === 'function') ? pbLoadAll() : {}); }catch(e){}
       if(localN >= 3 && n < localN * 0.5){                /* 安全装置：極端に少ない → 差し替えない */
         status('error', '⚠️ 安全のため取り込みを止めました');
         try{ console.warn('[D] Firestore の物件が手元より大幅に少ないため差し替えを中止 ' + n + ' < ' + localN); }catch(e){}
         return r;
       }
-      var ad = adoptBlds(fs);
+      ad = adoptBlds(fs);
       if(gasOk){
         r.payload.buildings = ad.out;
         r.buildingCount     = count(ad.out);
@@ -755,6 +772,12 @@
        *  決めた中身です。ここで書いておけば、
        *  どの呼び出し元から来ても、控えと手元が必ずそろいます。      */
       try{ if(typeof pbSaveRaw === 'function') pbSaveRaw(ad.out); }catch(e){}
+      }
+      /* ↑ ここまでが、物件があるときだけの処理です */
+      /* ★ 物件が0件でも、Firestore を読めたことは確かです。
+           uifix.js の古い合体（両方を残す）を止めるため、旗を立てます。
+           これが立っていないと、消した契約が合体で戻ってきます。 */
+      if(noBld){ try{ window.__fsPrimary = true; }catch(e){} }
 
       /* ★★ 未送信の札を、ここで消せるようにします（出口をひとつ足します）
        *
@@ -874,10 +897,12 @@
       }catch(e){}
       /* 念のため、もう一度立てておきます（上で立てたものと同じ旗です） */
       try{ window.__fsPrimary = true; }catch(e){}
-      writeMap(revKey(), ad.revs);
-      writeMap(sigKey(), ad.sigs);
-      fprWriteAll(ad.fprs);
-      try{ console.log('[D] 読み込み：Firestore から物件 ' + n + ' 件'); }catch(e){}
+      if(ad){
+        writeMap(revKey(), ad.revs);
+        writeMap(sigKey(), ad.sigs);
+        fprWriteAll(ad.fprs);
+        try{ console.log('[D] 読み込み：Firestore から物件 ' + n + ' 件'); }catch(e){}
+      }
       if(after.length) return Promise.all(after).then(function(){ return r; }).catch(function(){ return r; });
       return r;
     });
@@ -1111,8 +1136,35 @@
     var out = {}, revs = {}, sigs = {}, id, mySig, kept = 0, broke = 0;
     var has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k); };
 
+    /* ★★ 2026/11/20）いま消している途中の契約は、クラウドから戻しません。
+     *
+     *  契約の × を押すと、こう進みます。
+     *    ① 手元から消す
+     *    ② 「消す番号」を控える（ctDelQ）
+     *    ③ クラウドへ送る
+     *  ②と③のあいだに、保存前の確かめ（readAll）が走ります。
+     *  そのときクラウドには、その契約がまだ残っています。
+     *  ここが何も考えずにクラウドの中身を手元へ書いていたので、
+     *  消したはずの契約が、その場で戻ってきていました。
+     *  ロムさんが 2026/11/20 に PIVOT4 で見つけた症状です。
+     *  番号は、控えの表からも消えたときに外れます（flushCtDel）。
+     *  tests/tctdel.cjs が見張ります。                              */
+    var pend = {};
+    try{
+      var _q = ctDelQ(), _qi;
+      for(_qi = 0; _qi < _q.length; _qi++) pend[_q[_qi]] = 1;
+    }catch(e){}
+
     for(id in cs.map){
       if(!has(cs.map, id)) continue;
+      if(pend[id]){
+        /* 手元には戻しませんが、版番号だけは控えておきます。
+           これが無いと「クラウドにあって手元に無い＝消すもの」と
+           見分けられず、クラウドからも消えなくなります。 */
+        revs[id] = cs.revs[id];
+        sigs[id] = cs.sigs[id];
+        continue;
+      }
       if(has(mine, id) && oldS[id] !== undefined){
         mySig = null;
         try{ mySig = sig(ctDoc(id, mine[id])); }catch(e){ mySig = null; }
@@ -1600,7 +1652,34 @@
       if(!fs) return noEscape('クラウドが読めない');
       if(count(fs.buildings) === 0){
         if(count(readMap(sigKey())) > 0) return noEscape('クラウドが空に見える');
-        return P(url, body, t);                                   /* 移行前 */
+        /* ★★ 2026/11/20）物件が1件も無いときも、契約とオーナーは
+         *     クラウド（Firestore）へ保存します。
+         *
+         *  これまでは、ここで控えのスプレッドシート（GAS）へ
+         *  素通しするだけでした。saveNow() を通らないので、
+         *  契約をクラウドへ書く saveCtOw() も呼ばれません。
+         *
+         *  そのため PIVOT4（物件がまだ0件）では、こうなっていました。
+         *    ・契約の × を押す → 手元からは消える
+         *    ・クラウドには残ったまま
+         *    ・すぐあとの読み直しで、消したはずの契約が戻る
+         *  ロムさんが 2026/11/20 に見つけた症状です。
+         *  tests/tctdel.cjs が、物件0件のときも見張ります。
+         *
+         *  控えへの送信（P）は、これまでどおり先に通します。
+         *  クラウドの保存が失敗しても、控えの結果は返します。       */
+        return Promise.resolve(P(url, body, t)).then(function(r){
+          return Promise.resolve(saveCtOw(body)).then(function(){
+            fsDrop();          /* 中身が変わったので、読んだものの使い回しをやめます */
+            /* クラウドから消えたのを確かめたので、控えの表の行も消します */
+            try{ flushCtDel(P, url); }catch(e){}
+            try{ if(window.__pvRealtime && typeof window.__pvRealtime.ring === 'function') window.__pvRealtime.ring(); }catch(e){}
+            return r;
+          }, function(e){
+            try{ console.warn('[E] 物件0件のときの 契約・オーナー保存に失敗', e); }catch(x){}
+            return r;
+          });
+        });
       }
       /* ★ ここで控えをクラウドの中身で塗り替えると、
            「ほかの端末が直したもの」まで「この端末が直したもの」に見えます。
