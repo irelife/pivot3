@@ -74,24 +74,28 @@ let P=0,F=0; const ok=(n,c,x)=>{ if(c){P++;console.log('  ✅ '+n);} else {F++;c
  const BP = pre.replace(/_+$/,'') + '/data/buildings';
  if(WITH_BLD){
    SHEET.buildings = { b1:{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1', spots:{} } };
-   await pg.evaluate((a)=>{
-     window.__seed(a[0],'b1',{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1',
-       spots:{}, rev:1, updatedAt:'2026-11-01T00:00:00.000Z', updatedBy:'x' });
-   }, [BP]);
  }
  console.log('   物件：' + (WITH_BLD ? 'あり（1件）' : 'なし（0件）'));
 
- /* クラウド（Firestore）に契約6件 */
+ /* ★ にせクラウドの中身は sessionStorage に控えます。
+      その控えは、画面を読み込んだときに1回だけ読み出されます。
+      ですから「入れてから読み込み直す」と、混んでいるときに
+      前の画面の書き込みと新しい画面の読み出しがぶつかり、
+      入れたはずの6件が消えることがあります（2026/11/20）。
+      読み込み直したあとに入れて、そのまま取り込ませます。     */
+ await pg.reload(); await pg.waitForTimeout(3000);
  await pg.evaluate((a)=>{
+   if(a[2]){
+     window.__seed(a[1],'b1',{ id:'b1', name:'物件A', addr:'岡山県岡山市北区1-1',
+       spots:{}, rev:1, updatedAt:'2026-11-01T00:00:00.000Z', updatedBy:'x' });
+   }
    for(var i=1;i<=6;i++){
      window.__seed(a[0],'c'+i,{ id:'c'+i, property:'物件'+i, room:'10'+i,
        contractor:'契約者'+i, status:'申込', rev:1, updatedAt2:'2026-11-01T00:00:00.000Z' });
    }
- }, [CT]);
- /* にせクラウドの中身は sessionStorage に控えます。
-    書き終わる前に読み込み直すと、まれに消えます。少し待ちます。 */
- await pg.waitForTimeout(600);
- await pg.reload(); await pg.waitForTimeout(Number(process.env.PV_WAIT||6000));
+ }, [CT, BP, WITH_BLD]);
+ await pg.evaluate(()=>{ try{ window.forcePullLatest(); }catch(e){} });
+ await pg.waitForTimeout(Number(process.env.PV_WAIT||7000));
 
  const nLocal = ()=>pg.evaluate((k)=>{ try{ return Object.keys(JSON.parse(localStorage.getItem(k)||'{}')).length; }catch(e){ return -1; } }, LS);
  const hasLocal = (id)=>pg.evaluate((a)=>{ try{ return !!JSON.parse(localStorage.getItem(a[0])||'{}')[a[1]]; }catch(e){ return false; } }, [LS,id]);
