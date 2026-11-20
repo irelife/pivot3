@@ -127,7 +127,38 @@ let P=0,F=0; const ok=(n,c,x)=>{ if(c){P++;console.log('  ✅ '+n);} else {F++;c
  ok('★★ 開き直しても c3 は戻らない', (await hasLocal('c3'))===false, await nLocal());
  ok('★★ ほかの5件は残っている', (await nLocal())===5, await nLocal());
 
- console.log('\n❻ 画面のエラー');
+ /* ---- ★ 2台めの端末（版番号を控えていない）が、書き戻さないか ---- */
+ console.log('\n❻ ★★ 古いままの2台めが、消した契約を書き戻さない');
+ /* 2026/11/20 ロムさんの PC と同じ形を作ります。
+      ・手元の契約表には c3 が残っている
+      ・版番号も指紋も控えていない（物件0件の端末は、こうなっていました）
+      ・消した印の写しも持っていない
+    この端末が読み直したとき、c3 を「自分の作りたて」と誤解して
+    クラウドへ書き戻すと、消したはずの契約が全員に戻ります。      */
+ await pg.evaluate((a)=>{
+   var LS = a[0], pre = a[1];
+   var m = {}; try{ m = JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ m = {}; }
+   m['c3'] = { id:'c3', property:'物件3', room:'103', contractor:'契約者3', status:'申込' };
+   localStorage.setItem(LS, JSON.stringify(m));
+   var rev = {}, sg = {};
+   try{ rev = JSON.parse(localStorage.getItem(pre+'fs_ct_rev')||'{}'); }catch(e){}
+   try{ sg  = JSON.parse(localStorage.getItem(pre+'fs_ct_sig')||'{}'); }catch(e){}
+   delete rev['c3']; delete sg['c3'];
+   localStorage.setItem(pre+'fs_ct_rev', JSON.stringify(rev));
+   localStorage.setItem(pre+'fs_ct_sig', JSON.stringify(sg));
+   localStorage.removeItem(pre+'fs_ct_gone');     /* 印の写しも持っていない */
+ }, [LS, pre]);
+ ok('★ 2台めの形を作れた（c3 が手元に戻っている）', (await hasLocal('c3'))===true);
+
+ await pg.reload(); await pg.waitForTimeout(8000);
+ await pg.evaluate(()=>{ try{ if(typeof window.__pushNow==='function') window.__pushNow(); }catch(e){} });
+ await pg.waitForTimeout(6000);
+
+ ok('★★ 2台めの手元からも c3 が消えた', (await hasLocal('c3'))===false, await nLocal());
+ ok('★★ クラウドへ書き戻していない',   (await hasCloud('c3'))===false);
+ ok('★★ 控えの表へも書き戻していない', !SHEET.contracts['c3'], Object.keys(SHEET.contracts));
+
+ console.log('\n❼ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);
 
  const hint = (process.env.PV_ALLLOG==='1') ? logs.slice(-60) : logs.filter(l=>/契約|削除|保存|止め/.test(l)).slice(-12);
