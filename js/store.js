@@ -575,13 +575,35 @@
     });
   }
 
+  /* ★2026/11/20 消した印を、画面を開いたときに1回だけ受け取ります。
+   *
+   *  ふだんの見回り（__pvSyncNow）は「目印」をもともと読んでいるので、
+   *  そちらでは増えません（delChanged で相乗りしています）。
+   *  増えるのは、画面を開いた1回だけです。
+   *  ここで受け取っておかないと、古いままの端末が
+   *  「消された契約」を「自分の作りたて」と誤解して書き戻します。 */
+  var _goneOnce = false;
+  function ctGoneOnce(){
+    if(_goneOnce) return Promise.resolve(null);
+    _goneOnce = true;
+    try{
+      return metaRef().get().then(function(d){
+        use('read', 1, '消した印を受け取る（開いたとき1回だけ）');
+        var dd = {};
+        try{ dd = (d && d.exists && (d.data() || {})) || {}; }catch(e){ dd = {}; }
+        ctGoneMerge(dd.ctGone || {});
+        return null;
+      }, function(){ return null; });
+    }catch(e){ return Promise.resolve(null); }
+  }
+
   function onLoad(P, url, body, t){
     if(preCheck()){
       var lite = onLoadLight(P, url, body, t);
       if(lite) return lite;
     }
     var gas = Promise.resolve(P(url, body, t)).catch(function(e){ return { ok:false, message:String(e && e.message || e) }; });
-    return Promise.all([gas, fsTriple()]).then(function(a){
+    return Promise.all([gas, fsTriple(), ctGoneOnce()]).then(function(a){
       var r = a[0], fs = a[1][0], cts = a[1][1], ows = a[1][2];
       _fsReadOk = !!(fs && count(fs.buildings) > 0);
       /* ★ v25）「読めたか」と「中身があったか」は、別のことです。
@@ -1913,7 +1935,10 @@
    *  ・クラウドにその契約がまた現れたら（GASの作り直しなど）、
    *    クラウドのほうが勝ちます。印は邪魔をしません。            */
   function ctGoneK(){ return pfx() + 'fs_ct_gone'; }
-  function ctGoneRef(){ return db().collection(INS).doc('data').collection('misc').doc('ct_deleted'); }
+  /* ★ 置き場は「消したことの目印」（misc/meta）の中です。
+       わざわざ別の1枚にすると、画面を開くたびの読み取りが
+       4回から5回に増えます。2026/09/06 に枠を使い切った件があるので、
+       読み取りは増やしません。目印は、もともと毎回読んでいます。 */
   var CT_GONE_DAYS = 60;
 
   function ctGoneRead(){
@@ -1946,7 +1971,7 @@
     for(i = 0; i < ids.length; i++) m[ids[i]] = at;
     writeMap(ctGoneK(), m);
     try{
-      return ctGoneRef().set({ ids:m, updatedAt2:at }, { merge:false })
+      return metaRef().set({ ctGone:m, ctGoneAt:at }, { merge:true })
         .then(function(){ return null; }, function(e){
           try{ console.warn('[E] 消した印をクラウドへ書けませんでした', e); }catch(x){}
           return null;
@@ -2011,25 +2036,9 @@
     return c;
   }
 
-  /* 消した印を、クラウドから取り込みます。
-     読みは1回ぶん。多くても10分に1回しか読みません。 */
-  var _goneAt = 0;
-  function ctGoneSync(force){
-    var now = Date.now();
-    if(!force && (now - _goneAt) < 10 * 60 * 1000) return Promise.resolve(null);
-    _goneAt = now;
-    try{
-      return ctGoneRef().get().then(function(sn){
-        use('read', 1, '消した印を読む');
-        if(sn && sn.exists) ctGoneMerge((sn.data() || {}).ids || {});
-        return null;
-      }, function(){ return null; });
-    }catch(e){ return Promise.resolve(null); }
-  }
-
   function readCts(){
     try{
-    return ctGoneSync(true).then(function(){ return ctCol().get(); }).then(function(qs){
+    return ctCol().get().then(function(qs){
       /* ★ v24）クラウドへ届いていません（端末の中の控えから返ってきました）。
            読めなかったのと同じに扱います。ここで区別しないと、
            「0件」を「みんなが消した」と取りちがえます。 */
@@ -2064,11 +2073,7 @@
   function readCtsSince(since){
     if(!since) return readCts();
     try{
-    /* ★2026/11/20 差分だけ読むときも、消した印は取り込みます。
-         画面を開くたびに1回だけ（10分の間隔を置きます）。 */
-    return ctGoneSync(false).then(function(){
-      return ctCol().where('updatedAt2', '>', since).get();
-    }).then(function(qs){
+    return ctCol().where('updatedAt2', '>', since).get().then(function(qs){
       /* ★ v24）クラウドへ届いていません（端末の中の控えから返ってきました）。
            読めなかったのと同じに扱います。ここで区別しないと、
            「0件」を「みんなが消した」と取りちがえます。 */
@@ -2991,14 +2996,19 @@
     function delChanged(){
       return metaRef().get().then(function(d){
         use('read', 1, '消したことの目印を見る');
-        var at = '';
-        try{ at = String((d.exists && (d.data() || {}).delAt) || ''); }catch(e){ at = ''; }
+        var dd = {};
+        try{ dd = (d.exists && (d.data() || {})) || {}; }catch(e){ dd = {}; }
+        /* ★2026/11/20 消した契約の印も、ここでいっしょに受け取ります。
+             別の1枚にすると読み取りが増えるので、同じ目印に相乗りします。 */
+        try{ ctGoneMerge(dd.ctGone || {}); }catch(e){}
+        var at = String(dd.delAt || '');
+        var ga = String(dd.ctGoneAt || '');
         var had = '';
         try{ had = String(localStorage.getItem(delKey()) || ''); }catch(e){ had = ''; }
         /* まだ誰も消していないときは「-」を控えます。
            そうしておかないと「一度も見ていない」と「見たが空だった」を
            見分けられず、はじめの1回の削除を取りこぼします。 */
-        var cur = at || '-';
+        var cur = (at || '-') + '|' + (ga || '-');
         if(cur === had) return false;
         try{ localStorage.setItem(delKey(), cur); }catch(e){}
         if(!had) return false;        /* はじめの1回は、ものさしを合わせるだけ */
