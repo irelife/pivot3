@@ -107,6 +107,28 @@ const FAKE = `
   }
   var db = {
     collection: function(n){ return colRef(n); },
+    /* ★2026/11/22 本物の Firestore にある batch を、にせクラウドにも足します。
+       store.js の seedCts（契約の移行）と __pvSeedBlds（物件の移行）が使います。
+       ここが無いと「batch is not a function」で落ち、検査が本物とずれます。 */
+    batch: function(){
+      var ops = [];
+      return {
+        set: function(ref, d){ ops.push({k:'set', p:ref.__path, d:d}); return this; },
+        update: function(ref, d){ ops.push({k:'upd', p:ref.__path, d:d}); return this; },
+        delete: function(ref){ ops.push({k:'del', p:ref.__path}); return this; },
+        commit: function(){
+          for(var i = 0; i < ops.length; i++){
+            var o = ops[i];
+            if(o.k === 'set'){ cnt('writes',1,o.p); DB.docs[o.p] = JSON.parse(JSON.stringify(o.d)); notify(o.p); }
+            else if(o.k === 'upd'){ cnt('writes',1,o.p);
+              if(!DB.docs[o.p]) return Promise.reject(new Error('not-found'));
+              applyPatch(o.p, o.d); notify(o.p); }
+            else { cnt('writes',1,o.p); delete DB.docs[o.p]; notify(o.p); }
+          }
+          return Promise.resolve();
+        }
+      };
+    },
     runTransaction: function(fn){
       var tx = {
         get: function(ref){ cnt('reads',1,ref.__path); return Promise.resolve(snapOf(ref.__path, ref.__path.split('/').pop(), DB.docs[ref.__path])); },

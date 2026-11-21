@@ -3766,6 +3766,64 @@
              中の deleteFromCloud は window に出ていないので、
              外から差し替えることができません。
              そこで、contracts.js 側から、この mark を呼んでもらいます。 */
+        /* ★★ 2026/11/22）物件を、はじめてクラウドへ写す仕掛け
+         *
+         *  契約には seedCts がありますが、物件にはありませんでした。
+         *  そのため「クラウドに物件が0件」の画面は、いつまでも
+         *  移行前のままです。物件は控えのスプレッドシートと
+         *  端末の中にしか無く、ほかの画面が控えを作り直すと消えます。
+         *  （PIVOT4 が、まさにこの形でした。2026/11/22 ロムさん）
+         *
+         *  安全のため、クラウドが本当に0件のときだけ動きます。
+         *  1件でも入っていれば、何もしません（上書き事故を防ぎます）。 */
+        window.__pvSeedBlds = function(){
+          var mine = {};
+          try{ mine = (typeof pbLoadAll === 'function') ? (pbLoadAll() || {}) : {}; }catch(e){ mine = {}; }
+          var ids = [], k;
+          for(k in mine){ if(Object.prototype.hasOwnProperty.call(mine, k)) ids.push(k); }
+          if(!ids.length) return Promise.resolve({ ok:false, why:'手元に物件がありません' });
+
+          return readAll('移行の前の確かめ').then(function(fs){
+            if(!fs) return { ok:false, why:'クラウドを読めませんでした' };
+            if(count(fs.buildings) > 0){
+              return { ok:false, why:'クラウドにはもう物件が ' + count(fs.buildings) + ' 件あります。写しません' };
+            }
+            var at = new Date().toISOString(), who = (me() || '(名前なし)') + '（移行）';
+            var revs = readMap(revKey()), sigs = readMap(sigKey()), fprs = fprRead();
+            var done = 0;
+
+            function chunk(i){
+              if(i >= ids.length) return Promise.resolve(null);
+              var batch = db().batch(), j, id, d;
+              for(j = i; j < ids.length && j < i + 200; j++){
+                id = ids[j];
+                d = toDoc(id, mine[id]);
+                d.rev = 1; d.updatedAt = at; d.updatedBy = who;
+                batch.set(col().doc(id), d);
+                revs[id] = 1;
+                sigs[id] = sig(toDoc(id, mine[id]));
+                try{ fprs[id] = fprOf(toDoc(id, mine[id])); }catch(e){}
+                done++;
+              }
+              return batch.commit().then(function(){ return chunk(j); });
+            }
+
+            return chunk(0).then(function(){
+              writeMap(revKey(), revs);
+              writeMap(sigKey(), sigs);
+              fprWriteAll(fprs);
+              _loaded = true;
+              try{ window.__fsPrimary = true; }catch(e){}
+              fsDrop();
+              try{ if(window.__pvRealtime && window.__pvRealtime.ring) window.__pvRealtime.ring(); }catch(e){}
+              try{ console.log('[D] 物件 ' + done + ' 件を Firestore に写しました'); }catch(e){}
+              return { ok:true, n:done };
+            });
+          }).catch(function(e){
+            return { ok:false, why:String((e && e.message) || e) };
+          });
+        };
+
         window.__pvCtDel = {
           mark: function(id){ if(id) ctDelQAdd(id); },
           read: function(){ return ctDelQ(); },
