@@ -31,14 +31,26 @@ function testPage(list){
     list.map(f => '<link rel="stylesheet" href="file://' + DIR + '/' + f + '">').join('') +
     /* ふだんの画面は、見ているところ以外を隠します。
        ここはカード1枚だけの ためし用なので、出しておきます。 */
-    '<style>#kb-view{display:block !important;}</style>' +
+    /* ふだんの画面は、見ているところ以外を隠します。
+       ここはカード1枚だけの ためし用なので、出しておきます。
+       幅は、実際の並びと同じ 300px にそろえます（минmax(300px,1fr)）。 */
+    '<style>#kb-view{display:block !important;}' +
+    '.kb-grid{display:flex;gap:18px;align-items:flex-start;}' +
+    '.kb-grid > .ct-card{width:300px;flex:0 0 300px;}</style>' +
     '</head><body><div id="kb-view"><div class="kb-grid">' +
     '<div class="ct-card status-apply" data-id="c1">' +
       '<button class="ct-card-del">×</button>' +
       '<div class="ct-head"><span class="ct-head-left">' +
         '<span class="ct-type-label ct-type-indiv">個人</span>' +
-        '<span class="ct-ad-label">AD100%</span>' +
-      '</span></div>' +
+        '<span class="ct-ad-label">AD200%</span>' +
+      '</span>' +
+      /* ★2026/11/25 右側（日付＋プルダウン）も入れます。
+           ここが無いと「枠からはみ出す」を捕まえられません。 */
+      '<div class="ct-status-box">' +
+        '<span class="ct-status-date"><span class="ct-status-date-arrow">📅</span>11/21' +
+        '<span class="ct-status-date-edit">✎</span></span>' +
+        '<select class="ct-status-select"><option>審査完了</option></select>' +
+      '</div></div>' +
       '<div class="ct-main"><div class="ct-body"><div class="card-title">カンパネラ 101号</div></div></div>' +
     '</div></div></div></body></html>';
 }
@@ -86,8 +98,31 @@ function testPage(list){
  ok('★★ 隠れていない（display）', !!m4 && m4.display !== 'none', m4);
  ok('★★ 透明になっていない（opacity=1）', !!m4 && m4.opacity === '1', m4);
  ok('★★ 指で押せる大きさ（38px以上）', !!m4 && m4.w >= 38 && m4.h >= 38, m4);
- ok('★★ 左上の「個人／AD」が、×とかぶらないようにずれている',
-    !!m4 && parseFloat(m4.padL) >= 40, m4);
+ /* ★2026/11/25 「44px ずらす」という数字で見ていましたが、
+      数字そのものに意味はありません。見たいのは
+      「×と、個人の札が、重なっていないか」です。
+      実際の位置で見ます（44px だと右がはみ出していました）。 */
+ const lap4 = await sp.evaluate(()=>{
+   const del = document.querySelector('.ct-card-del');
+   const lab = document.querySelector('.ct-type-label');
+   if(!del || !lab) return null;
+   const d = del.getBoundingClientRect(), l = lab.getBoundingClientRect();
+   return { すきま: Math.round(l.left - d.right) };
+ });
+ ok('★★ ×と「個人」の札が、重なっていない', !!lap4 && lap4.すきま >= 0, lap4);
+
+ console.log('\n❸-2 ★★ 日付とプルダウンが、カードの枠からはみ出していない');
+ const over4 = await sp.evaluate(()=>{
+   const card = document.querySelector('.ct-card');
+   const box  = document.querySelector('.ct-status-box');
+   if(!card || !box) return null;
+   const cr = card.getBoundingClientRect(), br = box.getBoundingClientRect();
+   const cs = getComputedStyle(card);
+   return { はみ出し: Math.round(br.right - (cr.right - parseFloat(cs.paddingRight))),
+            カード幅: Math.round(cr.width) };
+ });
+ ok('★ 右側の箱がある', !!over4, over4);
+ ok('★★ カードの枠から、はみ出していない', !!over4 && over4.はみ出し <= 0, over4);
 
  /* ---- パソコンの幅（PIVOT4）---- */
  console.log('\n❹ パソコンの幅でも、PIVOT4 は × が出ている');

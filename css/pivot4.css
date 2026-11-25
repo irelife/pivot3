@@ -31,8 +31,24 @@
 #kb-view .ct-card-del:active{ background:#e60012; }
 #kb-view .ct-card-del:hover{ background:#e60012; }
 
-/* ×のぶん、左上の「個人／AD」を右へずらして、かぶらないようにします */
-#kb-view .ct-head-left{ padding-left:44px; }
+/* ×のぶん、左上の「個人／AD」を右へずらして、かぶらないようにします。
+   ★2026/11/25 直し
+     はじめは 44px ずらしていました。ところがカードの上の段は
+     「左の札」と「右の日付＋プルダウン」を両端に寄せる作りで、
+     右側は縮まない決まり（flex:0 0 auto）です。
+     そのため左を 44px ずらしたぶん、右の日付とプルダウンが
+     カードの外へ押し出されていました（300px幅で 16px はみ出し）。
+     ・ずらす幅を、×に本当に必要なぶん（34px）まで減らす
+     ・左の札のほうを縮む・折り返す側にする
+     の2つで、枠の中に収めます。                                   */
+#kb-view .ct-head-left{
+  padding-left:34px;
+  flex:1 1 auto;
+  min-width:0;
+}
+/* 右の日付とプルダウンは、カードからはみ出さないようにします */
+#kb-view .ct-status-box{ max-width:100%; }
+#kb-view .ct-status-select{ max-width:100%; }
 
 /* せまい画面では、カードの上の段が低いので、少しだけ下げます */
 @media (max-width:760px){
