@@ -8,17 +8,25 @@
      文面を手で直したほうが早いことがあります。
      そのために、Excel で開いて直せる形で出します。
 
-   作りかた
-     表（table）の形にして、.xls の名前で落とします。
-     Excel は、この形をそのまま開いて編集できます。
-     余計な部品（ライブラリ）は使いません。増やすと、
-     いつか動かなくなる場所が1つ増えるからです。
+   ★ なぜ、作りかたを変えたか（2026/11/27）
+     はじめは「HTML の表を .xls という名前で落とす」やりかたでした。
+     中身は出るのですが、紙の設定（A3・横・まん中）が、
+     Excel にも LibreOffice にも、ひとつも届きませんでした。
+     3回直して3回とも届かなかったので、作りかたを変えました。
+
+     いまは、本物の .xlsx（Excel のファイル）を組み立てています。
+     .xlsx は、XML をいくつか ZIP で固めたものです。
+     紙の設定は、その XML にはっきり書けるので、確実に届きます。
+     外の部品（ライブラリ）は使っていません。ZIP も自分で作ります。
 
    ★ PIVOT4 だけで使います（pivot4/index.html からだけ読みます）。
    ===================================================================== */
 (function(){
   'use strict';
 
+  /* ------------------------------------------------------------------
+     XML の決まりごと
+     ------------------------------------------------------------------ */
   function esc(s){
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -32,24 +40,17 @@
     return m[1] + '年' + parseInt(m[2], 10) + '月' + parseInt(m[3], 10) + '日';
   }
 
-  /* ★ 印刷の契約書（A3横・2段組）と、同じ並びにします。
-       左の段・とじしろ・右の段 の3列。1行＝1段落なので、
-       Excel ではそのマスを押して、文字を直すだけです。
-       中身は js/buildings.js の generateKeiyakuPrint とそろえてあります。
-       直すときは、両方いっしょに直してください。                 */
-
-  /* 段落を1つ作ります。b:true で見出し、r:true で右寄せ */
+  /* ------------------------------------------------------------------
+     ① 中身（左の段・右の段）を作る
+        印刷の契約書（js/buildings.js の generateKeiyakuPrint）と、
+        一字一句そろえてあります。直すときは、両方いっしょに。
+     ------------------------------------------------------------------ */
   function para(text, opt){
     var o = opt || {};
-    return { t: text, b: !!o.b, r: !!o.r, s: !!o.s };
-  }
-  function cell(p){
-    if(!p) return '<td class="p">&nbsp;</td>';
-    var cls = 'p' + (p.b ? ' hd' : '') + (p.r ? ' rt' : '') + (p.s ? ' sm' : '');
-    return '<td class="' + cls + '">' + esc(p.t) + '</td>';
+    return { t: text, b: !!o.b, r: !!o.r };     /* b:見出し  r:右寄せ */
   }
 
-  window.buildKeiyakuXlsHtml = function(data){
+  window.buildKeiyakuDoc = function(data){
     var d = data || {};
     var cmp = d.company || {};
     var cmpName = cmp.name || 'IREライフ株式会社';
@@ -58,8 +59,8 @@
     var taxRate = (d.taxRate === undefined || d.taxRate === null) ? 10 : Number(d.taxRate);
     var taxAmount = Math.round(price - price / (1 + taxRate / 100));
     var tk = Array.isArray(d.tokuyaku) ? d.tokuyaku : [];
+    var i;
 
-    /* ---- 左の段 ---- */
     var L = [];
     L.push(para('賃貸代理人：' + cmpName + '(以下、「甲」という。)と賃借人 ' + (d.userName || '') +
       '(以下、「乙」という。)は、以下のとおり駐車場賃貸借契約(以下、「本契約」という。)を締結する。'));
@@ -86,7 +87,6 @@
     L.push(para('2. 乙が、前項の通知なく解約をなす場合には、1ヶ月分の賃料に相当する金員を甲に支払うものとする。'));
     L.push(para('3. 第1項に基づく中途解約が行われる場合、当該中途解約の日が属する月に係る賃料については、日割りにて精算する。'));
 
-    /* ---- 右の段 ---- */
     var R = [];
     R.push(para('契約解除：第7条', { b:true }));
     R.push(para('甲は、乙が本契約に違反したときは、何らの催告をしないで直ちに本契約を解除することができる。'));
@@ -98,7 +98,7 @@
     R.push(para('1. 乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。'));
     R.push(para('2. 賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。'));
     R.push(para('3. 甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。'));
-    for(var i = 0; i < tk.length; i++){ R.push(para((i + 4) + '. ' + tk[i])); }
+    for(i = 0; i < tk.length; i++){ R.push(para((i + 4) + '. ' + tk[i])); }
     R.push(para(''));
     R.push(para('以上のとおり契約が成立したことを証するため、本書2通を作成し、甲乙各自署名のうえ、甲乙各自その1通を保有する。'));
     R.push(para(fmtJp(d.contractDate), { r:true }));
@@ -113,68 +113,250 @@
     R.push(para('住所　' + (d.userAddr || '')));
     R.push(para('氏名　　　　　　　　　　　　　　　　　　印'));
 
-    var n = Math.max(L.length, R.length), rows = '', k;
-    rows += '<tr><td class="t" colspan="3">駐車場賃貸借契約書</td></tr>';
-    for(k = 0; k < n; k++){
-      rows += '<tr>' + cell(L[k]) + '<td class="g">&nbsp;</td>' + cell(R[k]) + '</tr>';
-    }
-
-    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
-      'xmlns:x="urn:schemas-microsoft-com:office:excel" ' +
-      'xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">' +
-      '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
-      '<x:Name>駐車場賃貸借契約書</x:Name>' +
-      /* ★★ ここの「並べる順番」は、変えないでください。
-           Excel はこのかたまりを、決まった順番でしか読みません。
-           順番がちがうと、黙って全部を捨てます（エラーも出ません）。
-           2026/11/27、Print を先に書いていたために、A3 も 横 も
-           まん中 も、ひとつも効いていませんでした。
-           正しい順番：PageSetup → FitToPage → Print → 表示の設定   */
-      '<x:WorksheetOptions>' +
-        /* ① 紙の向きと置きかた。Landscape＝横。
-             CenterHorizontal / CenterVertical で、紙のまん中に置きます。 */
-        '<x:PageSetup>' +
-          '<x:Layout x:Orientation="Landscape" x:CenterHorizontal="1" x:CenterVertical="1"/>' +
-          '<x:Header x:Margin="0"/><x:Footer x:Margin="0"/>' +
-          '<x:PageMargins x:Bottom="0.4" x:Left="0.4" x:Right="0.4" x:Top="0.4"/>' +
-        '</x:PageSetup>' +
-        /* ② 1ページに収める */
-        '<x:FitToPage/>' +
-        /* ③ 紙の大きさ。8 ＝ A3 */
-        '<x:Print>' +
-          '<x:ValidPrinterInfo/>' +
-          '<x:PaperSizeIndex>8</x:PaperSizeIndex>' +
-          '<x:Scale>100</x:Scale>' +
-          '<x:FitWidth>1</x:FitWidth><x:FitHeight>1</x:FitHeight>' +
-          '<x:HorizontalResolution>600</x:HorizontalResolution>' +
-          '<x:VerticalResolution>600</x:VerticalResolution>' +
-        '</x:Print>' +
-        /* ④ 表示の設定 */
-        '<x:DoNotDisplayGridlines/>' +
-        '<x:Selected/>' +
-      '</x:WorksheetOptions>' +
-      '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
-      '<style>' +
-      /* ★ Excel 以外（LibreOffice など）で開いたときの、紙の指定 */
-      '@page{size:A3 landscape;margin:1cm;}' +
-      /* ★ 文字の大きさと段の幅。A3 の紙を、ちょうど使いきる寸法にしています。
-           小さくすると下が空き、大きくすると Excel が勝手に縮めます。    */
-      'table{border-collapse:collapse;font-family:"Yu Mincho","MS Mincho",serif;font-size:12pt;}' +
-      'td{border:none;vertical-align:top;padding:2px 6px;' +
-      '   mso-number-format:"\\@";white-space:normal;word-break:break-all;}' +
-      'td.t{font-family:"Yu Gothic","Meiryo",sans-serif;font-size:24pt;font-weight:700;' +
-      '     text-align:center;padding:10px 0 16px;}' +
-      'td.p{width:545pt;line-height:1.7;}' +
-      'td.g{width:36pt;}' +
-      'td.hd{font-family:"Yu Gothic","Meiryo",sans-serif;font-weight:700;font-size:13pt;' +
-      '      padding-top:9px;}' +
-      'td.rt{text-align:right;}' +
-      '</style></head><body>' +
-      '<table>' + rows + '</table>' +
-      '</body></html>';
+    return { title:'駐車場賃貸借契約書', left:L, right:R };
   };
 
-  /* ファイル名。物件名と区画と日付を入れます */
+  /* ------------------------------------------------------------------
+     ② .xlsx の中身（XML）を作る
+
+        ★ 紙の設定は、ここに書きます。ここなら確実に届きます。
+            pageSetup  paperSize="8"（A3）  orientation="landscape"（横）
+            printOptions  horizontalCentered / verticalCentered（まん中）
+            pageSetUpPr fitToPage="1"（1ページに収める）
+
+        ★★ 段の幅（width）と 文字の大きさ の関係に、気をつけてください。
+            紙に対する「見た目の大きさ」は、文字の pt では決まりません。
+            段の幅は「ふつうの文字いくつ分か」で数えます。そのものさしが
+            fonts の1つめ（本文の字）なので、字を大きくすると段も同じだけ
+            広がり、ぜんぶ同じ比のまま大きくなるだけです。そのあと
+            「1ページに収める」で元の大きさまで縮められて、何も変わりません。
+            じっさい 12pt → 16pt にしても、刷り上がりは寸分同じでした。
+
+            紙に対する見た目を決めるのは、段の幅（COL_TEXT）のほうです。
+            段を狭くすると、折り返しが増えて縦に伸び、紙をよく使います。
+
+            いまの値（本文18pt／段66）は、LibreOffice で実際に A3 に刷って
+            測って決めました。特約を3つ足した契約で
+              縦 89%・横 94%・上下の空き 5%ずつ。
+            文字を大きめにしてあるのは、はみ出したぶんは Excel が
+            自動で縮めてくれるからです（足りないぶんは、足してくれません）。
+     ------------------------------------------------------------------ */
+  var COL_TEXT = 66;         /* 本文の段。左右2つ    */
+  var COL_GAP  = 3.6;        /* まん中の、とじしろ   */
+
+  function colLetter(i){ return ['A','B','C'][i]; }
+
+  function cellXml(ref, styleIdx, text){
+    if(text === '' || text === null || text === undefined) return '';
+    return '<c r="' + ref + '" s="' + styleIdx + '" t="inlineStr">' +
+           '<is><t xml:space="preserve">' + esc(text) + '</t></is></c>';
+  }
+  /* 0:本文  1:見出し  2:題名  3:右寄せ */
+  function styleOf(p){ return p.b ? 1 : (p.r ? 3 : 0); }
+
+  window.buildKeiyakuXlsxParts = function(data){
+    var doc = window.buildKeiyakuDoc(data);
+    var L = doc.left, R = doc.right;
+    var n = Math.max(L.length, R.length);
+    var rows = '', k, r, c;
+
+    /* 1行め＝題名。A1:C1 をつなげて、まん中に出します */
+    rows += '<row r="1" ht="42" customHeight="1">' +
+            cellXml('A1', 2, doc.title) + '</row>';
+
+    for(k = 0; k < n; k++){
+      r = k + 2;
+      c = '';
+      if(L[k] && L[k].t !== '') c += cellXml('A' + r, styleOf(L[k]), L[k].t);
+      if(R[k] && R[k].t !== '') c += cellXml('C' + r, styleOf(R[k]), R[k].t);
+      rows += '<row r="' + r + '">' + c + '</row>';
+    }
+
+    var sheet =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
+      '<dimension ref="A1:C' + (n + 1) + '"/>' +
+      '<sheetViews><sheetView showGridLines="0" tabSelected="1" workbookViewId="0"/></sheetViews>' +
+      '<sheetFormatPr defaultRowHeight="18"/>' +
+      '<cols>' +
+        '<col min="1" max="1" width="' + COL_TEXT + '" customWidth="1"/>' +
+        '<col min="2" max="2" width="' + COL_GAP + '" customWidth="1"/>' +
+        '<col min="3" max="3" width="' + COL_TEXT + '" customWidth="1"/>' +
+      '</cols>' +
+      '<sheetData>' + rows + '</sheetData>' +
+      '<mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>' +
+      /* ★ 紙のまん中に置く */
+      '<printOptions horizontalCentered="1" verticalCentered="1"/>' +
+      '<pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0" footer="0"/>' +
+      /* ★ A3（paperSize 8）・横（landscape）・1ページに収める */
+      '<pageSetup paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="1"' +
+      ' horizontalDpi="600" verticalDpi="600"/>' +
+      '</worksheet>';
+
+    var styles =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="3">' +
+        '<font><sz val="18"/><name val="Yu Mincho"/></font>' +
+        '<font><b/><sz val="19"/><name val="Yu Gothic"/></font>' +
+        '<font><b/><sz val="34"/><name val="Yu Gothic"/></font>' +
+      '</fonts>' +
+      '<fills count="2">' +
+        '<fill><patternFill patternType="none"/></fill>' +
+        '<fill><patternFill patternType="gray125"/></fill>' +
+      '</fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      /* numFmtId 49 ＝ 文字あつかい。「P05」を勝手に数字にしません */
+      '<cellXfs count="4">' +
+        '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment vertical="top" wrapText="1"/></xf>' +
+        '<xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment vertical="top" wrapText="1"/></xf>' +
+        '<xf numFmtId="49" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment horizontal="center" vertical="center"/></xf>' +
+        '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment horizontal="right" vertical="top" wrapText="1"/></xf>' +
+      '</cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+      '</styleSheet>';
+
+    var workbook =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"' +
+      ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="' + esc(doc.title) + '" sheetId="1" r:id="rId1"/></sheets>' +
+      '</workbook>';
+
+    var wbRels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '</Relationships>';
+
+    var rootRels =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>';
+
+    var types =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '</Types>';
+
+    return {
+      '[Content_Types].xml': types,
+      '_rels/.rels': rootRels,
+      'xl/workbook.xml': workbook,
+      'xl/_rels/workbook.xml.rels': wbRels,
+      'xl/styles.xml': styles,
+      'xl/worksheets/sheet1.xml': sheet
+    };
+  };
+
+  /* ------------------------------------------------------------------
+     ③ ZIP に固める（.xlsx は、XML を ZIP でまとめたものです）
+
+        縮めずに、そのまま入れる「保存(store)」だけを使います。
+        縮める処理を自分で書くと、間違えたときに原因が追えません。
+        中身は数十キロバイトなので、縮めなくても困りません。
+     ------------------------------------------------------------------ */
+  var CRC_TABLE = (function(){
+    var t = new Uint32Array(256), c, i, k;
+    for(i = 0; i < 256; i++){
+      c = i;
+      for(k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(buf){
+    var c = 0xFFFFFFFF, i;
+    for(i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function utf8(str){
+    if(typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
+    /* ふるい端末むけの控え */
+    var s = unescape(encodeURIComponent(str)), a = new Uint8Array(s.length), i;
+    for(i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 0xFF;
+    return a;
+  }
+
+  window.buildKeiyakuXlsxZip = function(parts){
+    var names = [], name, chunks = [], central = [], offset = 0;
+    for(name in parts){ if(Object.prototype.hasOwnProperty.call(parts, name)) names.push(name); }
+
+    function u16(v){ return [v & 0xFF, (v >>> 8) & 0xFF]; }
+    function u32(v){ return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+    function push(arr, bytes){ var i; for(i = 0; i < bytes.length; i++) arr.push(bytes[i]); }
+
+    var local = [], i, j, nb, db, cr;
+    for(i = 0; i < names.length; i++){
+      nb = utf8(names[i]);
+      db = utf8(parts[names[i]]);
+      cr = crc32(db);
+
+      var h = [];
+      push(h, u32(0x04034b50));          /* 目印 */
+      push(h, u16(20));                  /* 必要な版 */
+      push(h, u16(0x0800));              /* 名前は UTF-8 */
+      push(h, u16(0));                   /* 縮めない */
+      push(h, u16(0)); push(h, u16(0));  /* 日時（使いません） */
+      push(h, u32(cr));
+      push(h, u32(db.length)); push(h, u32(db.length));
+      push(h, u16(nb.length)); push(h, u16(0));
+      for(j = 0; j < nb.length; j++) h.push(nb[j]);
+
+      var cd = [];
+      push(cd, u32(0x02014b50));
+      push(cd, u16(20)); push(cd, u16(20));
+      push(cd, u16(0x0800)); push(cd, u16(0));
+      push(cd, u16(0)); push(cd, u16(0));
+      push(cd, u32(cr));
+      push(cd, u32(db.length)); push(cd, u32(db.length));
+      push(cd, u16(nb.length)); push(cd, u16(0)); push(cd, u16(0));
+      push(cd, u16(0)); push(cd, u16(0)); push(cd, u32(0));
+      push(cd, u32(offset));
+      for(j = 0; j < nb.length; j++) cd.push(nb[j]);
+
+      local.push({ h:h, d:db });
+      central.push(cd);
+      offset += h.length + db.length;
+    }
+
+    var cdStart = offset, cdLen = 0;
+    for(i = 0; i < central.length; i++) cdLen += central[i].length;
+
+    var end = [];
+    push(end, u32(0x06054b50));
+    push(end, u16(0)); push(end, u16(0));
+    push(end, u16(names.length)); push(end, u16(names.length));
+    push(end, u32(cdLen)); push(end, u32(cdStart));
+    push(end, u16(0));
+
+    var total = cdStart + cdLen + end.length;
+    var out = new Uint8Array(total), p = 0;
+    for(i = 0; i < local.length; i++){
+      out.set(local[i].h, p); p += local[i].h.length;
+      out.set(local[i].d, p); p += local[i].d.length;
+    }
+    for(i = 0; i < central.length; i++){ out.set(central[i], p); p += central[i].length; }
+    out.set(end, p);
+    return out;
+  };
+
+  /* ------------------------------------------------------------------
+     ④ ファイル名と、落とすところ
+     ------------------------------------------------------------------ */
   window.buildKeiyakuXlsName = function(data){
     var d = data || {};
     var bad = /[\\\/:*?"<>|]/g;
@@ -183,7 +365,7 @@
     if(d.spotNo)  parts.push(String(d.spotNo).replace(bad, ''));
     var t = new Date();
     parts.push(t.getFullYear() + String(t.getMonth() + 1).padStart(2, '0') + String(t.getDate()).padStart(2, '0'));
-    return parts.join('_') + '.xls';
+    return parts.join('_') + '.xlsx';
   };
 
   window.exportKeiyakuXls = function(){
@@ -194,12 +376,12 @@
     var data = window.collectKeiyakuData();
     if(!data) return;                     /* 入力が足りないときは、向こうが知らせています */
 
-    var html = window.buildKeiyakuXlsHtml(data);
-    var name = window.buildKeiyakuXlsName(data);
     try{
-      /* ★ 先頭の ﻿ は、Excel に「UTF-8 です」と伝える印です。
-           これが無いと、日本語が文字化けすることがあります。 */
-      var blob = new Blob(['﻿' + html], { type:'application/vnd.ms-excel;charset=utf-8' });
+      var zip = window.buildKeiyakuXlsxZip(window.buildKeiyakuXlsxParts(data));
+      var name = window.buildKeiyakuXlsName(data);
+      var blob = new Blob([zip], {
+        type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url; a.download = name;
