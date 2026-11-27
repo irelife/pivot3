@@ -100,7 +100,43 @@ const DATA = {
  const bad = await pg.evaluate(()=>window.buildKeiyakuXlsName({ bldName:'A/B:C*D?E"F<G>H|I', spotNo:'P1' }));
  ok('★★ ファイル名に使えない記号が落ちる', !/[\\\/:*?"<>|]/.test(bad.replace(/\.xls$/,'')), bad);
 
- console.log('\n❾ 画面のエラー');
+ /* ---- ★ 印刷が壊れていないか（js/buildings.js を直したので） ---- */
+ console.log('\n❾ ★★ 印刷（printKeiyaku）が、これまでどおり動く');
+ const pg2 = await b.newPage({viewport:{width:900,height:700}});
+ const err2=[]; pg2.on('pageerror',e=>err2.push(e.message.slice(0,200)));
+ pg2.on('dialog', d=>d.accept());
+ await pg2.goto('about:blank');
+ /* 画面の入力欄だけを用意します（本体のアプリは起こしません） */
+ await pg2.evaluate((d)=>{
+   const put = (id, v) => { const el = document.createElement('input'); el.id = id; el.value = v; document.body.appendChild(el); };
+   put('ky-user-name', d.userName); put('ky-user-addr', d.userAddr);
+   put('ky-bld-addr', d.bldAddr);   put('ky-bld-name', d.bldName);
+   put('ky-spot-no', d.spotNo);     put('ky-price', String(d.price));
+   put('ky-tax-rate', String(d.taxRate));
+   put('ky-period-from', d.periodFrom); put('ky-period-to', d.periodTo);
+   put('ky-contract-date', d.contractDate);
+   put('ky-pay-day', d.payDay);     put('ky-pay-method', d.payMethod);
+   const ta = document.createElement('textarea');
+   ta.id = 'ky-tokuyaku'; ta.value = (d.tokuyaku || []).join('\n');
+   document.body.appendChild(ta);
+   window.getCompanyInfo = function(){ return d.company; };
+   window.__got = null;
+   window.escapeHtml = function(x){ return String(x == null ? '' : x); };
+ }, DATA);
+ await pg2.addScriptTag({ path: path.join(DIR,'js','buildings.js') });
+ /* 印刷の出口だけ差し替えて、渡される中身を受け取ります */
+ await pg2.evaluate(()=>{ window.generateKeiyakuPrint = function(d){ window.__got = d; }; });
+ const got = await pg2.evaluate(()=>{ try{ printKeiyaku(); }catch(e){ return { __err:String(e) }; } return window.__got; });
+ ok('★ printKeiyaku が動く（エラーなし）', !!got && !got.__err, got && got.__err);
+ ok('★★ 印刷へ渡る中身：物件名',  !!got && got.bldName === DATA.bldName, got && got.bldName);
+ ok('★★ 印刷へ渡る中身：区画',    !!got && got.spotNo === DATA.spotNo, got && got.spotNo);
+ ok('★★ 印刷へ渡る中身：賃料',    !!got && got.price === DATA.price, got && got.price);
+ ok('★★ 印刷へ渡る中身：支払日',  !!got && got.payDay === DATA.payDay, got && got.payDay);
+ ok('★★ 印刷へ渡る中身：支払方法',!!got && got.payMethod === DATA.payMethod, got && got.payMethod);
+ ok('★★ 印刷へ渡る中身：特約2件', !!got && (got.tokuyaku||[]).length === 2, got && got.tokuyaku);
+ ok('★ 印刷のほうでエラーが出ていない', err2.length===0, err2);
+
+ console.log('\n❿ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);
 
  await b.close();
