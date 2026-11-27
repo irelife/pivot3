@@ -11,6 +11,7 @@
  *     ⑤ 記号（< > &）を入れても、画面が壊れない
  *     ⑥ ファイル名に、物件名と区画が入る
  *     ⑦ PIVOT4 だけに入っている（PIVOT3 には入れない）
+ *     ⑧ 印刷のほうも、乙の住所が「乙の住所」になっている（物件の住所ではない）
  */
 const fs=require('fs');
 const path=require('path');
@@ -164,8 +165,12 @@ const DATA = {
    window.escapeHtml = function(x){ return String(x == null ? '' : x); };
  }, DATA);
  await pg2.addScriptTag({ path: path.join(DIR,'js','buildings.js') });
- /* 印刷の出口だけ差し替えて、渡される中身を受け取ります */
- await pg2.evaluate(()=>{ window.generateKeiyakuPrint = function(d){ window.__got = d; }; });
+ /* 印刷の出口だけ差し替えて、渡される中身を受け取ります
+    （本物は __realGen に取っておいて、あとで出来上がりも見ます） */
+ await pg2.evaluate(()=>{
+   window.__realGen = window.generateKeiyakuPrint;
+   window.generateKeiyakuPrint = function(d){ window.__got = d; };
+ });
  const got = await pg2.evaluate(()=>{ try{ printKeiyaku(); }catch(e){ return { __err:String(e) }; } return window.__got; });
  ok('★ printKeiyaku が動く（エラーなし）', !!got && !got.__err, got && got.__err);
  ok('★★ 印刷へ渡る中身：物件名',  !!got && got.bldName === DATA.bldName, got && got.bldName);
@@ -175,6 +180,25 @@ const DATA = {
  ok('★★ 印刷へ渡る中身：支払方法',!!got && got.payMethod === DATA.payMethod, got && got.payMethod);
  ok('★★ 印刷へ渡る中身：特約2件', !!got && (got.tokuyaku||[]).length === 2, got && got.tokuyaku);
  ok('★ 印刷のほうでエラーが出ていない', err2.length===0, err2);
+
+ console.log('\n❾-2 ★★ 印刷の「賃借人(乙) 住所」が、乙の住所になっている');
+ /* ★2026/11/27 ここは駐車場の所在地（物件の住所）が入っていました。
+      画面で入れた「賃借人の住所」は集めてはいたのに、使われていませんでした。
+      Excel 出力と食いちがっていたので直し、二度と戻らないよう見張ります。 */
+ const pr = await pg2.evaluate((d)=>{
+   let out = null;
+   window.showDocOverlay = function(h){ out = h; };
+   try{ window.__realGen(Object.assign({}, d, { company:d.company })); }
+   catch(e){ return { __err:String(e) }; }
+   return { html: out };
+ }, DATA);
+ ok('★ 印刷の組み立てが動く（エラーなし）', !!pr && !pr.__err && !!pr.html, pr && pr.__err);
+ const sign = pr && pr.html ? pr.html.slice(pr.html.indexOf('賃借人(乙)')) : '';
+ ok('★★ 乙の住所が出ている（部屋番号つき）', sign.indexOf('ノスタルジア 205号') >= 0, sign.slice(0,200));
+ ok('★★ 駐車場の所在地を、乙の住所として出していない',
+    sign.indexOf(DATA.bldAddr) < 0, sign.slice(0,200));
+ ok('★★ Excel と印刷で、乙の住所がそろっている',
+    html.indexOf('ノスタルジア 205号') >= 0 && sign.indexOf('ノスタルジア 205号') >= 0);
 
  console.log('\n❿ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);

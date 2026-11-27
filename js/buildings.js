@@ -1363,7 +1363,12 @@ function generateKeiyakuPrint(data){
             '<div class="sign-line"><span class="sign-label">　</span><span class="sign-val nodash">' + escapeHtml(cmpRepTitle) + '　' + escapeHtml(cmpRepName) + '</span></div>' +
             '<div class="sign-line"><span class="sign-label">登録番号</span><span class="sign-val">' + escapeHtml(cmpInvoice) + '</span></div>' +
             '<div class="party-label" style="margin-top:14px;">賃借人(乙)</div>' +
-            '<div class="sign-line"><span class="sign-label">住所</span><span class="sign-val">' + escapeHtml(data.bldAddr) + '</span></div>' +
+            /* ★2026/11/27 ここは data.bldAddr（＝駐車場の所在地）を出していました。
+                 乙の住所の欄に、物件の住所が入っていたということです。
+                 画面の「賃借人の住所」は集めてはいたのに、使われていませんでした。
+                 部屋番号つきの住所が自動で入るので、画面では気づけませんでした。
+                 Excel 出力（js/keiyakuxls.js）と、ここで食いちがっていたので直します。 */
+            '<div class="sign-line"><span class="sign-label">住所</span><span class="sign-val">' + escapeHtml(data.userAddr || '') + '</span></div>' +
             '<div class="sign-line"><span class="sign-label">氏名</span><span class="sign-val sign-name-otsu">&nbsp;<span class="inkan-mark">印</span></span></div>' +
           '</div>' +
         '</div>' +
