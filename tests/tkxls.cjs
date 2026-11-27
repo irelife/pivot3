@@ -80,6 +80,22 @@ const DATA = {
  /* ★2026/11/27 これが無いと Excel は紙の左上に寄せるので、下が大きく空きます */
  ok('★★ 紙のまん中に置く指定がある（上に寄らない）',
     /x:CenterVertical="1"/.test(html) && /x:CenterHorizontal="1"/.test(html));
+ /* ★★2026/11/27 ここが本題です。
+      Excel は WorksheetOptions の中を、決まった順番でしか読みません。
+      順番がちがうと、黙って全部を捨てます（エラーも出ません）。
+      じっさい Print を先に書いていたために、A3 も 横 も まん中 も、
+      ひとつも効いていませんでした。順番そのものを見張ります。     */
+ const opt = html.slice(html.indexOf('<x:WorksheetOptions>'), html.indexOf('</x:WorksheetOptions>'));
+ const iPage = opt.indexOf('<x:PageSetup>');
+ const iFit  = opt.indexOf('<x:FitToPage/>');
+ const iPrn  = opt.indexOf('<x:Print>');
+ ok('★★ PageSetup → FitToPage → Print の順になっている',
+    iPage >= 0 && iFit > iPage && iPrn > iFit, { PageSetup:iPage, FitToPage:iFit, Print:iPrn });
+ ok('★★ 紙の向きは PageSetup の中にある',
+    opt.indexOf('x:Orientation="Landscape"') > iPage &&
+    opt.indexOf('x:Orientation="Landscape"') < iFit);
+ ok('★★ 紙の大きさ（A3）は Print の中にある',
+    opt.indexOf('<x:PaperSizeIndex>8</x:PaperSizeIndex>') > iPrn);
  ok('★★ 1ページに収める指定がある',
     /<x:FitWidth>1<\/x:FitWidth>/.test(html) && /<x:FitHeight>1<\/x:FitHeight>/.test(html) && /<x:FitToPage\/>/.test(html));
  ok('★ 見出しは太字の指定（td.hd）がついている',

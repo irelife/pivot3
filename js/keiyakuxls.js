@@ -124,22 +124,39 @@
       'xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">' +
       '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
       '<x:Name>駐車場賃貸借契約書</x:Name>' +
+      /* ★★ ここの「並べる順番」は、変えないでください。
+           Excel はこのかたまりを、決まった順番でしか読みません。
+           順番がちがうと、黙って全部を捨てます（エラーも出ません）。
+           2026/11/27、Print を先に書いていたために、A3 も 横 も
+           まん中 も、ひとつも効いていませんでした。
+           正しい順番：PageSetup → FitToPage → Print → 表示の設定   */
       '<x:WorksheetOptions>' +
-        /* ★ A3 横・1ページに収める。開いたらそのまま印刷できる形にします */
-        '<x:Print><x:ValidPrinterInfo/><x:PaperSizeIndex>8</x:PaperSizeIndex>' +
-        '<x:FitWidth>1</x:FitWidth><x:FitHeight>1</x:FitHeight>' +
-        '<x:HorizontalResolution>600</x:HorizontalResolution>' +
-        '<x:VerticalResolution>600</x:VerticalResolution></x:Print>' +
-        '<x:FitToPage/>' +
-        /* ★ 紙の まん中 に置きます。これが無いと、Excel は紙の左上に寄せるので、
-             下が大きく空いて「上に行き過ぎ」に見えます。 */
+        /* ① 紙の向きと置きかた。Landscape＝横。
+             CenterHorizontal / CenterVertical で、紙のまん中に置きます。 */
         '<x:PageSetup>' +
-        '<x:Layout x:Orientation="Landscape" x:CenterHorizontal="1" x:CenterVertical="1"/>' +
-        '<x:PageMargins x:Top="0.4" x:Bottom="0.4" x:Left="0.4" x:Right="0.4"/></x:PageSetup>' +
+          '<x:Layout x:Orientation="Landscape" x:CenterHorizontal="1" x:CenterVertical="1"/>' +
+          '<x:Header x:Margin="0"/><x:Footer x:Margin="0"/>' +
+          '<x:PageMargins x:Bottom="0.4" x:Left="0.4" x:Right="0.4" x:Top="0.4"/>' +
+        '</x:PageSetup>' +
+        /* ② 1ページに収める */
+        '<x:FitToPage/>' +
+        /* ③ 紙の大きさ。8 ＝ A3 */
+        '<x:Print>' +
+          '<x:ValidPrinterInfo/>' +
+          '<x:PaperSizeIndex>8</x:PaperSizeIndex>' +
+          '<x:Scale>100</x:Scale>' +
+          '<x:FitWidth>1</x:FitWidth><x:FitHeight>1</x:FitHeight>' +
+          '<x:HorizontalResolution>600</x:HorizontalResolution>' +
+          '<x:VerticalResolution>600</x:VerticalResolution>' +
+        '</x:Print>' +
+        /* ④ 表示の設定 */
         '<x:DoNotDisplayGridlines/>' +
+        '<x:Selected/>' +
       '</x:WorksheetOptions>' +
       '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
       '<style>' +
+      /* ★ Excel 以外（LibreOffice など）で開いたときの、紙の指定 */
+      '@page{size:A3 landscape;margin:1cm;}' +
       /* ★ 文字の大きさと段の幅。A3 の紙を、ちょうど使いきる寸法にしています。
            小さくすると下が空き、大きくすると Excel が勝手に縮めます。    */
       'table{border-collapse:collapse;font-family:"Yu Mincho","MS Mincho",serif;font-size:12pt;}' +
