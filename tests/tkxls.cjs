@@ -5,11 +5,12 @@
  *
  *   見張ること
  *     ① 印刷の契約書と、中身がそろっている（条文10個・金額・期間・特約）
- *     ② Excel が開ける形になっている（表＋Excel の目印）
- *     ③ 特約の追記が、4番目から並ぶ
- *     ④ 記号（< > &）を入れても、画面が壊れない
- *     ⑤ ファイル名に、物件名と区画が入る
- *     ⑥ PIVOT4 だけに入っている（PIVOT3 には入れない）
+ *     ② 印刷と同じ「A3横・2段組」の形で出る（左段・とじしろ・右段）
+ *     ③ Excel が開ける形になっている（表＋Excel の目印）
+ *     ④ 特約の追記が、4番目から並ぶ
+ *     ⑤ 記号（< > &）を入れても、画面が壊れない
+ *     ⑥ ファイル名に、物件名と区画が入る
+ *     ⑦ PIVOT4 だけに入っている（PIVOT3 には入れない）
  */
 const fs=require('fs');
 const path=require('path');
@@ -62,6 +63,37 @@ const DATA = {
  ok('★★ シート名が入っている', /<x:Name>駐車場賃貸借契約書<\/x:Name>/.test(html));
  ok('★★ 文字として扱う指定がある（勝手に数字にしない）', /mso-number-format/.test(html));
 
+ console.log('\n❸-2 ★★ 印刷と同じ「A3横・2段組」になっている');
+ /* 題名は3列ぶちぬき。そのあとは「左段・とじしろ・右段」の3列が並びます */
+ ok('★★ 題名が1行めにある（3列ぶちぬき）',
+    /<tr><td class="t" colspan="3">駐車場賃貸借契約書<\/td><\/tr>/.test(html));
+ const rows = html.split('<tr>').slice(2);     /* 題名の行を除いた、本文の行 */
+ ok('★★ 本文の行がある', rows.length >= 20, rows.length);
+ ok('★★ どの行も「左段・とじしろ・右段」の3マス',
+    rows.every(function(r){ return (r.match(/<td /g) || []).length === 3; }),
+    rows.filter(function(r){ return (r.match(/<td /g) || []).length !== 3; }).slice(0,2));
+ ok('★★ まん中はとじしろ（td.g）',
+    rows.every(function(r){ return /<td class="g">/.test(r); }));
+ ok('★★ A3 の指定がある（PaperSizeIndex 8）', /<x:PaperSizeIndex>8<\/x:PaperSizeIndex>/.test(html));
+ ok('★★ 横置きの指定がある', /x:Orientation="Landscape"/.test(html));
+ ok('★★ 1ページに収める指定がある',
+    /<x:FitWidth>1<\/x:FitWidth>/.test(html) && /<x:FitHeight>1<\/x:FitHeight>/.test(html) && /<x:FitToPage\/>/.test(html));
+ ok('★ 見出しは太字の指定（td.hd）がついている',
+    html.indexOf('class="p hd">目的：第1条') >= 0 && html.indexOf('class="p hd">特約事項：第10条') >= 0);
+ /* 印刷と同じ区切り：第1〜6条は左の段、第7〜10条と署名欄は右の段 */
+ const side = function(word){
+   const r = rows.filter(function(x){ return x.indexOf(word) >= 0; })[0] || '';
+   const g = r.indexOf('<td class="g">');
+   const w = r.indexOf(word);
+   return (g < 0 || w < 0) ? '?' : (w < g ? '左' : '右');
+ };
+ ok('★★ 目的：第1条 は左の段',     side('目的：第1条') === '左', side('目的：第1条'));
+ ok('★★ 解約：第6条 は左の段',     side('解約：第6条') === '左', side('解約：第6条'));
+ ok('★★ 契約解除：第7条 は右の段', side('契約解除：第7条') === '右', side('契約解除：第7条'));
+ ok('★★ 特約事項：第10条 は右の段',side('特約事項：第10条') === '右', side('特約事項：第10条'));
+ ok('★★ 署名欄は右の段',           side('賃貸代理人(甲)') === '右', side('賃貸代理人(甲)'));
+ ok('★★ 表の線は引かない（契約書なので）', /td\{border:none/.test(html));
+
  console.log('\n❹ ★★ 中身が、印刷の契約書とそろっている');
  const must = ['駐車場賃貸借契約書','目的：第1条','賃料：第2条','賃貸借期間：第3条','禁止事項：第4条',
                '甲の免責事項：第5条','解約：第6条','契約解除：第7条','明け渡し：第8条','協議：第9条','特約事項：第10条'];
@@ -79,13 +111,21 @@ const DATA = {
  ok('★★ 契約日',               html.indexOf('2026年11月27日') >= 0);
  ok('★★ 会社名',               html.indexOf('IREライフ株式会社') >= 0);
  ok('★★ 登録番号',             html.indexOf('T1234567890123') >= 0);
+ ok('★★ 賃借人(乙)の住所',     html.indexOf('ノスタルジア 205号') >= 0);
+ ok('★ 押印欄がある（甲・乙とも）', (html.match(/印/g) || []).length >= 2);
 
  console.log('\n❻ ★★ 特約の追記が、4番目から並ぶ');
  ok('★★ 追記1つめが入っている', html.indexOf('居室契約が終わったら') >= 0);
- const i4 = html.indexOf('>4</td>');
- const i5 = html.indexOf('>5</td>');
+ const i4 = html.indexOf('>4. 居室契約が終わったら');
+ const i5 = html.indexOf('>5. 車両の');
  ok('★★ 番号が 4 から始まる', i4 >= 0, i4);
  ok('★★ 2つめは 5 になる',    i5 > i4, { i4:i4, i5:i5 });
+ ok('★★ もとからの3つは、そのまま1〜3',
+    html.indexOf('>1. 乙の希望により') >= 0 &&
+    html.indexOf('>2. 賃料及び証明書等発行料') >= 0 &&
+    html.indexOf('>3. 甲乙共に反社会的勢力') >= 0);
+ const noTk = await pg.evaluate((d)=>window.buildKeiyakuXlsHtml(Object.assign({}, d, { tokuyaku:[] })), DATA);
+ ok('★★ 追記が無いときは 4 番が出ない', noTk.indexOf('>4. ') < 0);
 
  console.log('\n❼ ★★ 記号を入れても壊れない');
  ok('★★ < > & がそのまま出ていない',
