@@ -32,19 +32,23 @@
     return m[1] + '年' + parseInt(m[2], 10) + '月' + parseInt(m[3], 10) + '日';
   }
 
-  /* 1行（見出し＋本文） */
-  function row(label, body, opt){
-    var o = opt || {};
-    var lab = o.head
-      ? '<td class="h" colspan="2">' + esc(label) + '</td>'
-      : '<td class="l">' + esc(label) + '</td><td class="b">' + esc(body) + '</td>';
-    return '<tr>' + lab + '</tr>';
-  }
-  function title(t){ return '<tr><td class="t" colspan="2">' + esc(t) + '</td></tr>'; }
-  function blank(){ return '<tr><td class="l"></td><td class="b"></td></tr>'; }
+  /* ★ 印刷の契約書（A3横・2段組）と、同じ並びにします。
+       左の段・とじしろ・右の段 の3列。1行＝1段落なので、
+       Excel ではそのマスを押して、文字を直すだけです。
+       中身は js/buildings.js の generateKeiyakuPrint とそろえてあります。
+       直すときは、両方いっしょに直してください。                 */
 
-  /* ★ 中身は、印刷の契約書とそろえてあります（js/buildings.js）。
-       直すときは、両方いっしょに直してください。            */
+  /* 段落を1つ作ります。b:true で見出し、r:true で右寄せ */
+  function para(text, opt){
+    var o = opt || {};
+    return { t: text, b: !!o.b, r: !!o.r, s: !!o.s };
+  }
+  function cell(p){
+    if(!p) return '<td class="p">&nbsp;</td>';
+    var cls = 'p' + (p.b ? ' hd' : '') + (p.r ? ' rt' : '') + (p.s ? ' sm' : '');
+    return '<td class="' + cls + '">' + esc(p.t) + '</td>';
+  }
+
   window.buildKeiyakuXlsHtml = function(data){
     var d = data || {};
     var cmp = d.company || {};
@@ -55,96 +59,94 @@
     var taxAmount = Math.round(price - price / (1 + taxRate / 100));
     var tk = Array.isArray(d.tokuyaku) ? d.tokuyaku : [];
 
-    var rows = '';
-    rows += title('駐車場賃貸借契約書');
-    rows += row('前文',
-      '賃貸代理人：' + cmpName + '(以下、「甲」という。)と賃借人 ' + (d.userName || '') +
-      '(以下、「乙」という。)は、以下のとおり駐車場賃貸借契約(以下、「本契約」という。)を締結する。');
-    rows += blank();
+    /* ---- 左の段 ---- */
+    var L = [];
+    L.push(para('賃貸代理人：' + cmpName + '(以下、「甲」という。)と賃借人 ' + (d.userName || '') +
+      '(以下、「乙」という。)は、以下のとおり駐車場賃貸借契約(以下、「本契約」という。)を締結する。'));
+    L.push(para('目的：第1条', { b:true }));
+    L.push(para('甲は下記記載の駐車場の専有部分(以下、「本件駐車場」という。)を、乙が賃借する下記物件の駐車場として、本契約書に記載の条件にて乙に賃貸する。'));
+    L.push(para('駐車場の表示：' + (d.bldName || '')));
+    L.push(para('駐車場の所在地：' + (d.bldAddr || '')));
+    L.push(para('専用区画1台「' + (d.spotNo || '') + '」'));
+    L.push(para('賃料：第2条', { b:true }));
+    L.push(para('賃料は月額金 ' + yen(price) + ' 円(消費税率' + taxRate + '%、うち消費税' + yen(taxAmount) +
+      '円)とし、毎月' + (d.payDay || '27日') + 'に翌月分を' + (d.payMethod || '口座振替') + 'にて支払うものとする。'));
+    L.push(para('賃貸借期間：第3条', { b:true }));
+    L.push(para('本契約の有効期間は、' + fmtJp(d.periodFrom) + 'から' + fmtJp(d.periodTo) + 'までの満2年間とする。'));
+    L.push(para('前項の期間満了1ヶ月前迄に甲または乙どちらかの相手方に対する解約の申し入れがない場合は、自動的に同条件にて2年間契約を更新し、以後も同様とする。'));
+    L.push(para('禁止事項：第4条', { b:true }));
+    L.push(para('乙は、次に掲げる行為をすることができない。'));
+    L.push(para('1. 本件駐車場を第三者に賃貸し、又は第三者に賃借権を譲渡すること'));
+    L.push(para('2. 本件駐車場に建物その他の工作物を設置し、又は現状に変更を加えること'));
+    L.push(para('3. 本件駐車場を駐車場以外の目的で利用してはいけない'));
+    L.push(para('甲の免責事項：第5条', { b:true }));
+    L.push(para('不可抗力、第三者の行為、その他甲の責めに帰すべき事由以外の事由により、乙の利用車両から生じた損害については、甲は一切責任を負わないものとする。'));
+    L.push(para('解約：第6条', { b:true }));
+    L.push(para('1. 甲乙は、いずれかの一方から本契約の解約を申し入れることができる。ただし、1ヶ月以上前に相手方に対して書面で通知すべきものとする。'));
+    L.push(para('2. 乙が、前項の通知なく解約をなす場合には、1ヶ月分の賃料に相当する金員を甲に支払うものとする。'));
+    L.push(para('3. 第1項に基づく中途解約が行われる場合、当該中途解約の日が属する月に係る賃料については、日割りにて精算する。'));
 
-    rows += row('目的：第1条', '', { head:true });
-    rows += row('', '甲は下記記載の駐車場の専有部分(以下、「本件駐車場」という。)を、乙が賃借する下記物件の駐車場として、本契約書に記載の条件にて乙に賃貸する。');
-    rows += row('駐車場の表示', d.bldName || '');
-    rows += row('駐車場の所在地', d.bldAddr || '');
-    rows += row('専用区画', '1台「' + (d.spotNo || '') + '」');
-    rows += blank();
+    /* ---- 右の段 ---- */
+    var R = [];
+    R.push(para('契約解除：第7条', { b:true }));
+    R.push(para('甲は、乙が本契約に違反したときは、何らの催告をしないで直ちに本契約を解除することができる。'));
+    R.push(para('明け渡し：第8条', { b:true }));
+    R.push(para('本契約が期間の満了により終了し、又は前条により解除されたときは、乙は直ちに本件駐車場を甲に返還するものとする。'));
+    R.push(para('協議：第9条', { b:true }));
+    R.push(para('甲及び乙は、本契約に定めのない事項が生じたときや、本契約の各条項の解釈につき疑義が生じたときは、信義誠実の原則に従い協議し、円満に解決を図るものとする。'));
+    R.push(para('特約事項：第10条', { b:true }));
+    R.push(para('1. 乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。'));
+    R.push(para('2. 賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。'));
+    R.push(para('3. 甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。'));
+    for(var i = 0; i < tk.length; i++){ R.push(para((i + 4) + '. ' + tk[i])); }
+    R.push(para(''));
+    R.push(para('以上のとおり契約が成立したことを証するため、本書2通を作成し、甲乙各自署名のうえ、甲乙各自その1通を保有する。'));
+    R.push(para(fmtJp(d.contractDate), { r:true }));
+    R.push(para(''));
+    R.push(para('賃貸代理人(甲)', { b:true }));
+    R.push(para('住所　' + cmpAddr));
+    R.push(para('氏名　' + cmpName + '　　　　　　　　　　　印'));
+    R.push(para('　　　' + ((cmp.rep_title || '') + '　' + (cmp.rep_name || '')).trim()));
+    R.push(para('登録番号　' + (cmp.invoice_no || '')));
+    R.push(para(''));
+    R.push(para('賃借人(乙)', { b:true }));
+    R.push(para('住所　' + (d.userAddr || '')));
+    R.push(para('氏名　　　　　　　　　　　　　　　　　　印'));
 
-    rows += row('賃料：第2条', '', { head:true });
-    rows += row('', '賃料は月額金 ' + yen(price) + ' 円(消費税率' + taxRate + '%、うち消費税' + yen(taxAmount) +
-      '円)とし、毎月' + (d.payDay || '27日') + 'に翌月分を' + (d.payMethod || '口座振替') + 'にて支払うものとする。');
-    rows += blank();
-
-    rows += row('賃貸借期間：第3条', '', { head:true });
-    rows += row('', '本契約の有効期間は、' + fmtJp(d.periodFrom) + 'から' + fmtJp(d.periodTo) + 'までの満2年間とする。');
-    rows += row('', '前項の期間満了1ヶ月前迄に甲または乙どちらかの相手方に対する解約の申し入れがない場合は、自動的に同条件にて2年間契約を更新し、以後も同様とする。');
-    rows += blank();
-
-    rows += row('禁止事項：第4条', '', { head:true });
-    rows += row('', '乙は、次に掲げる行為をすることができない。');
-    rows += row('1', '本件駐車場を第三者に賃貸し、又は第三者に賃借権を譲渡すること');
-    rows += row('2', '本件駐車場に建物その他の工作物を設置し、又は現状に変更を加えること');
-    rows += row('3', '本件駐車場を駐車場以外の目的で利用してはいけない');
-    rows += blank();
-
-    rows += row('甲の免責事項：第5条', '', { head:true });
-    rows += row('', '不可抗力、第三者の行為、その他甲の責めに帰すべき事由以外の事由により、乙の利用車両から生じた損害については、甲は一切責任を負わないものとする。');
-    rows += blank();
-
-    rows += row('解約：第6条', '', { head:true });
-    rows += row('1', '甲乙は、いずれかの一方から本契約の解約を申し入れることができる。ただし、1ヶ月以上前に相手方に対して書面で通知すべきものとする。');
-    rows += row('2', '乙が、前項の通知なく解約をなす場合には、1ヶ月分の賃料に相当する金員を甲に支払うものとする。');
-    rows += row('3', '第1項に基づく中途解約が行われる場合、当該中途解約の日が属する月に係る賃料については、日割りにて精算する。');
-    rows += blank();
-
-    rows += row('契約解除：第7条', '', { head:true });
-    rows += row('', '甲は、乙が本契約に違反したときは、何らの催告をしないで直ちに本契約を解除することができる。');
-    rows += blank();
-
-    rows += row('明け渡し：第8条', '', { head:true });
-    rows += row('', '本契約が期間の満了により終了し、又は前条により解除されたときは、乙は直ちに本件駐車場を甲に返還するものとする。');
-    rows += blank();
-
-    rows += row('協議：第9条', '', { head:true });
-    rows += row('', '甲及び乙は、本契約に定めのない事項が生じたときや、本契約の各条項の解釈につき疑義が生じたときは、信義誠実の原則に従い協議し、円満に解決を図るものとする。');
-    rows += blank();
-
-    rows += row('特約事項：第10条', '', { head:true });
-    rows += row('1', '乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。');
-    rows += row('2', '賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。');
-    rows += row('3', '甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。');
-    for(var i = 0; i < tk.length; i++){ rows += row(String(i + 4), tk[i]); }
-    rows += blank();
-
-    rows += row('', '以上のとおり契約が成立したことを証するため、本書2通を作成し、甲乙各自署名のうえ、甲乙各自その1通を保有する。');
-    rows += row('契約日', fmtJp(d.contractDate));
-    rows += blank();
-
-    rows += row('賃貸代理人(甲)', '', { head:true });
-    rows += row('住所', cmpAddr);
-    rows += row('氏名', cmpName + '　　　　　　　　　印');
-    rows += row('　', ((cmp.rep_title || '') + '　' + (cmp.rep_name || '')).trim());
-    rows += row('登録番号', cmp.invoice_no || '');
-    rows += blank();
-
-    rows += row('賃借人(乙)', '', { head:true });
-    rows += row('住所', d.userAddr || '');
-    rows += row('氏名', '　　　　　　　　　　　　　印');
+    var n = Math.max(L.length, R.length), rows = '', k;
+    rows += '<tr><td class="t" colspan="3">駐車場賃貸借契約書</td></tr>';
+    for(k = 0; k < n; k++){
+      rows += '<tr>' + cell(L[k]) + '<td class="g">&nbsp;</td>' + cell(R[k]) + '</tr>';
+    }
 
     return '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
       'xmlns:x="urn:schemas-microsoft-com:office:excel" ' +
       'xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">' +
       '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
       '<x:Name>駐車場賃貸借契約書</x:Name>' +
-      '<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>' +
+      '<x:WorksheetOptions>' +
+        /* ★ A3 横・1ページに収める。開いたらそのまま印刷できる形にします */
+        '<x:Print><x:ValidPrinterInfo/><x:PaperSizeIndex>8</x:PaperSizeIndex>' +
+        '<x:FitWidth>1</x:FitWidth><x:FitHeight>1</x:FitHeight>' +
+        '<x:HorizontalResolution>600</x:HorizontalResolution>' +
+        '<x:VerticalResolution>600</x:VerticalResolution></x:Print>' +
+        '<x:FitToPage/>' +
+        '<x:PageSetup><x:Layout x:Orientation="Landscape"/>' +
+        '<x:PageMargins x:Top="0.3" x:Bottom="0.3" x:Left="0.3" x:Right="0.3"/></x:PageSetup>' +
+        '<x:DoNotDisplayGridlines/>' +
+      '</x:WorksheetOptions>' +
       '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
       '<style>' +
-      'table{border-collapse:collapse;font-family:"Yu Gothic","Meiryo",sans-serif;font-size:11pt;}' +
-      'td{border:0.5pt solid #bbb;vertical-align:top;padding:4px 6px;' +
-      '   mso-number-format:"\\@";white-space:normal;}' +
-      'td.t{font-size:16pt;font-weight:700;text-align:center;padding:10px;}' +
-      'td.h{font-weight:700;background:#f0f0f0;}' +
-      'td.l{width:110pt;font-weight:700;}' +
-      'td.b{width:420pt;}' +
+      'table{border-collapse:collapse;font-family:"Yu Mincho","MS Mincho",serif;font-size:10.5pt;}' +
+      'td{border:none;vertical-align:top;padding:2px 6px;' +
+      '   mso-number-format:"\\@";white-space:normal;word-break:break-all;}' +
+      'td.t{font-family:"Yu Gothic","Meiryo",sans-serif;font-size:20pt;font-weight:700;' +
+      '     text-align:center;padding:10px 0 14px;}' +
+      'td.p{width:520pt;line-height:1.6;}' +
+      'td.g{width:28pt;}' +
+      'td.hd{font-family:"Yu Gothic","Meiryo",sans-serif;font-weight:700;font-size:11.5pt;' +
+      '      padding-top:8px;}' +
+      'td.rt{text-align:right;}' +
       '</style></head><body>' +
       '<table>' + rows + '</table>' +
       '</body></html>';
