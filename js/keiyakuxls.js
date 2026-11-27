@@ -131,21 +131,26 @@
         '<x:HorizontalResolution>600</x:HorizontalResolution>' +
         '<x:VerticalResolution>600</x:VerticalResolution></x:Print>' +
         '<x:FitToPage/>' +
-        '<x:PageSetup><x:Layout x:Orientation="Landscape"/>' +
-        '<x:PageMargins x:Top="0.3" x:Bottom="0.3" x:Left="0.3" x:Right="0.3"/></x:PageSetup>' +
+        /* ★ 紙の まん中 に置きます。これが無いと、Excel は紙の左上に寄せるので、
+             下が大きく空いて「上に行き過ぎ」に見えます。 */
+        '<x:PageSetup>' +
+        '<x:Layout x:Orientation="Landscape" x:CenterHorizontal="1" x:CenterVertical="1"/>' +
+        '<x:PageMargins x:Top="0.4" x:Bottom="0.4" x:Left="0.4" x:Right="0.4"/></x:PageSetup>' +
         '<x:DoNotDisplayGridlines/>' +
       '</x:WorksheetOptions>' +
       '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
       '<style>' +
-      'table{border-collapse:collapse;font-family:"Yu Mincho","MS Mincho",serif;font-size:10.5pt;}' +
+      /* ★ 文字の大きさと段の幅。A3 の紙を、ちょうど使いきる寸法にしています。
+           小さくすると下が空き、大きくすると Excel が勝手に縮めます。    */
+      'table{border-collapse:collapse;font-family:"Yu Mincho","MS Mincho",serif;font-size:12pt;}' +
       'td{border:none;vertical-align:top;padding:2px 6px;' +
       '   mso-number-format:"\\@";white-space:normal;word-break:break-all;}' +
-      'td.t{font-family:"Yu Gothic","Meiryo",sans-serif;font-size:20pt;font-weight:700;' +
-      '     text-align:center;padding:10px 0 14px;}' +
-      'td.p{width:520pt;line-height:1.6;}' +
-      'td.g{width:28pt;}' +
-      'td.hd{font-family:"Yu Gothic","Meiryo",sans-serif;font-weight:700;font-size:11.5pt;' +
-      '      padding-top:8px;}' +
+      'td.t{font-family:"Yu Gothic","Meiryo",sans-serif;font-size:24pt;font-weight:700;' +
+      '     text-align:center;padding:10px 0 16px;}' +
+      'td.p{width:545pt;line-height:1.7;}' +
+      'td.g{width:36pt;}' +
+      'td.hd{font-family:"Yu Gothic","Meiryo",sans-serif;font-weight:700;font-size:13pt;' +
+      '      padding-top:9px;}' +
       'td.rt{text-align:right;}' +
       '</style></head><body>' +
       '<table>' + rows + '</table>' +

@@ -77,6 +77,9 @@ const DATA = {
     rows.every(function(r){ return /<td class="g">/.test(r); }));
  ok('★★ A3 の指定がある（PaperSizeIndex 8）', /<x:PaperSizeIndex>8<\/x:PaperSizeIndex>/.test(html));
  ok('★★ 横置きの指定がある', /x:Orientation="Landscape"/.test(html));
+ /* ★2026/11/27 これが無いと Excel は紙の左上に寄せるので、下が大きく空きます */
+ ok('★★ 紙のまん中に置く指定がある（上に寄らない）',
+    /x:CenterVertical="1"/.test(html) && /x:CenterHorizontal="1"/.test(html));
  ok('★★ 1ページに収める指定がある',
     /<x:FitWidth>1<\/x:FitWidth>/.test(html) && /<x:FitHeight>1<\/x:FitHeight>/.test(html) && /<x:FitToPage\/>/.test(html));
  ok('★ 見出しは太字の指定（td.hd）がついている',
