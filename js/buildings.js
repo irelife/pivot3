@@ -1168,7 +1168,11 @@ function onKeiyakuPeriodFromChange(){
   document.getElementById('ky-period-to').value = iso;
 }
 
-function printKeiyaku(){
+/* ★2026/11/27 画面の入力を1か所にまとめます。
+     印刷（printKeiyaku）と、Excel 出し（js/keiyakuxls.js）の
+     両方から、同じ中身を使えるようにするためです。
+     入力が足りなければ知らせて null を返します。中身は変えていません。 */
+function collectKeiyakuData(){
   const userName = document.getElementById('ky-user-name').value.trim();
   let userAddr = document.getElementById('ky-user-addr').value.trim();
   let bldAddrVal = document.getElementById('ky-bld-addr').value.trim();
@@ -1193,9 +1197,9 @@ function printKeiyaku(){
   }catch(e){}
   const periodFrom = document.getElementById('ky-period-from').value;
   const periodTo = document.getElementById('ky-period-to').value;
-  if(!userName){ alert('賃借人(乙)の氏名を入力してください(契約書本文の識別に使用)'); return; }
-  if(!periodFrom || !periodTo){ alert('賃貸借期間を入力してください'); return; }
-  generateKeiyakuPrint({
+  if(!userName){ alert('賃借人(乙)の氏名を入力してください(契約書本文の識別に使用)'); return null; }
+  if(!periodFrom || !periodTo){ alert('賃貸借期間を入力してください'); return null; }
+  return {
     bldName: document.getElementById('ky-bld-name').value,
     bldAddr: bldAddrVal,
     spotNo: document.getElementById('ky-spot-no').value,
@@ -1228,7 +1232,14 @@ function printKeiyaku(){
       return v || '口座振替';
     })(),
     company: getCompanyInfo()
-  });
+  };
+}
+try{ window.collectKeiyakuData = collectKeiyakuData; }catch(e){}
+
+function printKeiyaku(){
+  const data = collectKeiyakuData();
+  if(!data) return;
+  generateKeiyakuPrint(data);
 }
 
 function generateKeiyakuPrint(data){
