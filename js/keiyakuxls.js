@@ -45,9 +45,10 @@
         印刷の契約書（js/buildings.js の generateKeiyakuPrint）と、
         一字一句そろえてあります。直すときは、両方いっしょに。
      ------------------------------------------------------------------ */
+  /* b:見出し  r:右寄せ  ind:字下げ(0〜2)  ul:下線  tb:上に区切り線 */
   function para(text, opt){
     var o = opt || {};
-    return { t: text, b: !!o.b, r: !!o.r };     /* b:見出し  r:右寄せ */
+    return { t: text, b: !!o.b, r: !!o.r, ind: o.ind || 0, ul: !!o.ul, tb: !!o.tb };
   }
 
   window.buildKeiyakuDoc = function(data){
@@ -66,9 +67,10 @@
       '(以下、「乙」という。)は、以下のとおり駐車場賃貸借契約(以下、「本契約」という。)を締結する。'));
     L.push(para('目的：第1条', { b:true }));
     L.push(para('甲は下記記載の駐車場の専有部分(以下、「本件駐車場」という。)を、乙が賃借する下記物件の駐車場として、本契約書に記載の条件にて乙に賃貸する。'));
-    L.push(para('駐車場の表示：' + (d.bldName || '')));
-    L.push(para('駐車場の所在地：' + (d.bldAddr || '')));
-    L.push(para('専用区画1台「' + (d.spotNo || '') + '」'));
+    /* ★ 印刷では、この3行は少し字下げしています（.bld-info） */
+    L.push(para('駐車場の表示：' + (d.bldName || ''), { ind:1 }));
+    L.push(para('駐車場の所在地：' + (d.bldAddr || ''), { ind:1 }));
+    L.push(para('専用区画1台「' + (d.spotNo || '') + '」', { ind:1 }));
     L.push(para('賃料：第2条', { b:true }));
     L.push(para('賃料は月額金 ' + yen(price) + ' 円(消費税率' + taxRate + '%、うち消費税' + yen(taxAmount) +
       '円)とし、毎月' + (d.payDay || '27日') + 'に翌月分を' + (d.payMethod || '口座振替') + 'にて支払うものとする。'));
@@ -77,15 +79,16 @@
     L.push(para('前項の期間満了1ヶ月前迄に甲または乙どちらかの相手方に対する解約の申し入れがない場合は、自動的に同条件にて2年間契約を更新し、以後も同様とする。'));
     L.push(para('禁止事項：第4条', { b:true }));
     L.push(para('乙は、次に掲げる行為をすることができない。'));
-    L.push(para('1. 本件駐車場を第三者に賃貸し、又は第三者に賃借権を譲渡すること'));
-    L.push(para('2. 本件駐車場に建物その他の工作物を設置し、又は現状に変更を加えること'));
-    L.push(para('3. 本件駐車場を駐車場以外の目的で利用してはいけない'));
+    /* ★ 印刷では、番号つきの箇条書きは字下げしています（ol） */
+    L.push(para('1. 本件駐車場を第三者に賃貸し、又は第三者に賃借権を譲渡すること', { ind:2 }));
+    L.push(para('2. 本件駐車場に建物その他の工作物を設置し、又は現状に変更を加えること', { ind:2 }));
+    L.push(para('3. 本件駐車場を駐車場以外の目的で利用してはいけない', { ind:2 }));
     L.push(para('甲の免責事項：第5条', { b:true }));
     L.push(para('不可抗力、第三者の行為、その他甲の責めに帰すべき事由以外の事由により、乙の利用車両から生じた損害については、甲は一切責任を負わないものとする。'));
     L.push(para('解約：第6条', { b:true }));
-    L.push(para('1. 甲乙は、いずれかの一方から本契約の解約を申し入れることができる。ただし、1ヶ月以上前に相手方に対して書面で通知すべきものとする。'));
-    L.push(para('2. 乙が、前項の通知なく解約をなす場合には、1ヶ月分の賃料に相当する金員を甲に支払うものとする。'));
-    L.push(para('3. 第1項に基づく中途解約が行われる場合、当該中途解約の日が属する月に係る賃料については、日割りにて精算する。'));
+    L.push(para('1. 甲乙は、いずれかの一方から本契約の解約を申し入れることができる。ただし、1ヶ月以上前に相手方に対して書面で通知すべきものとする。', { ind:2 }));
+    L.push(para('2. 乙が、前項の通知なく解約をなす場合には、1ヶ月分の賃料に相当する金員を甲に支払うものとする。', { ind:2 }));
+    L.push(para('3. 第1項に基づく中途解約が行われる場合、当該中途解約の日が属する月に係る賃料については、日割りにて精算する。', { ind:2 }));
 
     var R = [];
     R.push(para('契約解除：第7条', { b:true }));
@@ -95,23 +98,24 @@
     R.push(para('協議：第9条', { b:true }));
     R.push(para('甲及び乙は、本契約に定めのない事項が生じたときや、本契約の各条項の解釈につき疑義が生じたときは、信義誠実の原則に従い協議し、円満に解決を図るものとする。'));
     R.push(para('特約事項：第10条', { b:true }));
-    R.push(para('1. 乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。'));
-    R.push(para('2. 賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。'));
-    R.push(para('3. 甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。'));
-    for(i = 0; i < tk.length; i++){ R.push(para((i + 4) + '. ' + tk[i])); }
+    R.push(para('1. 乙の希望により、各種証明書等が必要な場合は金3,300 円(消費税率10%、うち消費税300円)にて甲が交付するものとする。', { ind:2 }));
+    R.push(para('2. 賃料及び証明書等発行料は、税法の改正により消費税等の税率が増減した場合は、改正税法施行日以降における増減後の税率により計算した税額とする。', { ind:2 }));
+    R.push(para('3. 甲乙共に反社会的勢力でないことを確約し、これに違反した場合、相手方は無催告で本契約を解除することができる。', { ind:2 }));
+    for(i = 0; i < tk.length; i++){ R.push(para((i + 4) + '. ' + tk[i], { ind:2 })); }
     R.push(para(''));
     R.push(para('以上のとおり契約が成立したことを証するため、本書2通を作成し、甲乙各自署名のうえ、甲乙各自その1通を保有する。'));
     R.push(para(fmtJp(d.contractDate), { r:true }));
     R.push(para(''));
-    R.push(para('賃貸代理人(甲)', { b:true }));
-    R.push(para('住所　' + cmpAddr));
-    R.push(para('氏名　' + cmpName + '　　　　　　　　　　　印'));
+    /* ★ 印刷では、署名欄の上に区切り線が1本あり、住所・氏名には下線が引いてあります */
+    R.push(para('賃貸代理人(甲)', { b:true, tb:true }));
+    R.push(para('住所　' + cmpAddr, { ul:true }));
+    R.push(para('氏名　' + cmpName + '　　　　　　　　　　　印', { ul:true }));
     R.push(para('　　　' + ((cmp.rep_title || '') + '　' + (cmp.rep_name || '')).trim()));
-    R.push(para('登録番号　' + (cmp.invoice_no || '')));
+    R.push(para('登録番号　' + (cmp.invoice_no || ''), { ul:true }));
     R.push(para(''));
     R.push(para('賃借人(乙)', { b:true }));
-    R.push(para('住所　' + (d.userAddr || '')));
-    R.push(para('氏名　　　　　　　　　　　　　　　　　　印'));
+    R.push(para('住所　' + (d.userAddr || ''), { ul:true }));
+    R.push(para('氏名　　　　　　　　　　　　　　　　　　印', { ul:true }));
 
     return { title:'駐車場賃貸借契約書', left:L, right:R };
   };
@@ -142,10 +146,26 @@
             自動で縮めてくれるからです（足りないぶんは、足してくれません）。
      ------------------------------------------------------------------ */
   var ROW_H = 28;            /* 1行ぶんの高さ        */
+  var ROW_H_HEAD = 34;       /* 見出しの行（上にすき間を作る） */
+  var TITLE_H = 72;          /* 題名の行（下にすき間を作る）   */
   var COL_TEXT = 66;         /* 本文の段。左右2つ    */
   var COL_GAP  = 3.6;        /* まん中の、とじしろ   */
 
-  function colLetter(i){ return ['A','B','C'][i]; }
+  /* ★ 会社印。印刷（js/buildings.js の INKAN_BASE64）と同じものを使います。
+       buildings.js を読んでいない画面（検査など）では、黙って省きます。   */
+  function inkanBytes(){
+    var b64 = '';
+    try{ b64 = (typeof INKAN_BASE64 === 'string') ? INKAN_BASE64 : ''; }catch(e){ b64 = ''; }
+    if(!b64) return null;
+    var i = b64.indexOf('base64,');
+    if(i < 0) return null;
+    try{
+      var bin = atob(b64.slice(i + 7));
+      var a = new Uint8Array(bin.length), k;
+      for(k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
+      return a;
+    }catch(e){ return null; }
+  }
 
   function cellXml(ref, styleIdx, text){
     if(text === '' || text === null || text === undefined) return '';
@@ -153,7 +173,18 @@
            '<is><t xml:space="preserve">' + esc(text) + '</t></is></c>';
   }
   /* 0:本文  1:見出し  2:題名  3:右寄せ */
-  function styleOf(p){ return p.b ? 1 : (p.r ? 3 : 0); }
+  /* 見た目の番号（styles.xml の cellXfs の並び順と、そろえてあります）
+       0 本文  1 見出し  2 題名  3 右寄せ
+       4 本文（字下げ1）  5 本文（字下げ2）
+       6 本文＋下線  7 見出し＋上の区切り線                           */
+  function styleOf(p){
+    if(p.b) return p.tb ? 7 : 1;
+    if(p.r) return 3;
+    if(p.ul) return 6;
+    if(p.ind === 1) return 4;
+    if(p.ind === 2) return 5;
+    return 0;
+  }
 
   /* ------------------------------------------------------------------
      ★★2026/11/28 「1マス＝1行」に組みなおしました。
@@ -173,6 +204,10 @@
      ------------------------------------------------------------------ */
   var CPL = 42;        /* 本文1行に入る字数（全角を1と数えます） */
   var CPL_HEAD = 38;   /* 見出しは字が大きいので、少なめ           */
+  /* ★ 字下げした行は、そのぶん入る字数が減ります。
+       ここを減らし忘れると、1行に入りきらず Excel 側でもう一度
+       折り返され、行の高さが足りずに下が切れます（2026/11/28）。 */
+  var CPL_IND = [42, 40, 37];
   var NO_HEAD = '、。，．・：；？！）」』】〕｝〉》”’ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮーヽヾ々';
 
   function chWidth(ch){
@@ -197,11 +232,19 @@
   }
   /* 段落の並びを、1行ずつの並びに開きます */
   function toLines(paras){
-    var out = [], i, j, ls;
+    var out = [], i, j, ls, p, t;
     for(i = 0; i < paras.length; i++){
-      if(paras[i].t === ''){ out.push({ t:'', b:false, r:false }); continue; }
-      ls = wrapLines(paras[i].t, paras[i].b ? CPL_HEAD : CPL);
-      for(j = 0; j < ls.length; j++) out.push({ t:ls[j], b:paras[i].b, r:paras[i].r });
+      p = paras[i];
+      if(p.t === ''){ out.push({ t:'', b:false, r:false, ind:0, ul:false, tb:false }); continue; }
+      ls = wrapLines(p.t, p.b ? CPL_HEAD : CPL_IND[p.ind || 0]);
+      for(j = 0; j < ls.length; j++){
+        t = ls[j];
+        /* ★ 番号つきの箇条書きは、2行めからを番号のぶんだけ下げます
+             （印刷の ol と同じ、ぶら下げ字下げ）                     */
+        if(j > 0 && p.ind === 2) t = '　' + t;
+        out.push({ t:t, b:p.b, r:p.r, ind:p.ind,
+                   ul:(p.ul && j === ls.length - 1), tb:(p.tb && j === 0) });
+      }
     }
     return out;
   }
@@ -213,21 +256,33 @@
     var rows = '', k, r, c;
 
     /* 1行め＝題名。A1:C1 をつなげて、まん中に出します */
-    rows += '<row r="1" ht="42" customHeight="1">' +
-            cellXml('A1', 2, doc.title) + '</row>';
+    /* ★ 印刷の題名は字間が広い（letter-spacing:14px）ので、字のあいだに
+         空白を入れて同じ見え方にします。                              */
+    rows += '<row r="1" ht="' + TITLE_H + '" customHeight="1">' +
+            cellXml('A1', 2, doc.title.split('').join('　')) + '</row>';
 
+    var inkanRow = -1;
     for(k = 0; k < n; k++){
       r = k + 2;
       c = '';
       if(L[k] && L[k].t !== '') c += cellXml('A' + r, styleOf(L[k]), L[k].t);
       if(R[k] && R[k].t !== '') c += cellXml('C' + r, styleOf(R[k]), R[k].t);
-      /* どの行も、同じ高さにします（1行ぶん） */
-      rows += '<row r="' + r + '" ht="' + ROW_H + '" customHeight="1">' + c + '</row>';
+      /* 会社印は、甲の「氏名」の行に重ねます（印刷と同じ場所） */
+      if(inkanRow < 0 && R[k] && R[k].t.indexOf('氏名　') === 0 && R[k].ul) inkanRow = r - 1;
+      /* ★ 見出しの行だけ、少し高くします。
+           印刷では見出しの上にすき間があるので（.clause-title の margin-top）、
+           同じ見え方になるようにしています。                         */
+      var h = ((L[k] && L[k].b) || (R[k] && R[k].b)) ? ROW_H_HEAD : ROW_H;
+      rows += '<row r="' + r + '" ht="' + h + '" customHeight="1">' + c + '</row>';
     }
+
+    var ink = inkanBytes();
+    if(inkanRow < 0) ink = null;
 
     var sheet =
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"' +
+      ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
       '<dimension ref="A1:C' + (n + 1) + '"/>' +
       '<sheetViews><sheetView showGridLines="0" tabSelected="1" workbookViewId="0"/></sheetViews>' +
@@ -245,6 +300,7 @@
       /* ★ A3（paperSize 8）・横（landscape）・1ページに収める */
       '<pageSetup paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="1"' +
       ' horizontalDpi="600" verticalDpi="600"/>' +
+      (ink ? '<drawing r:id="rId1"/>' : '') +
       '</worksheet>';
 
     var styles =
@@ -259,18 +315,40 @@
         '<fill><patternFill patternType="none"/></fill>' +
         '<fill><patternFill patternType="gray125"/></fill>' +
       '</fills>' +
-      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      /* 0:線なし  1:下線（署名欄）  2:上の区切り線（署名欄のはじまり） */
+      '<borders count="3">' +
+        '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+        '<border><left/><right/><top/><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border>' +
+        '<border><left/><right/><top style="thin"><color rgb="FF000000"/></top><bottom/><diagonal/></border>' +
+      '</borders>' +
       '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
       /* numFmtId 49 ＝ 文字あつかい。「P05」を勝手に数字にしません */
-      '<cellXfs count="4">' +
+      /* ★ 並び順を変えないでください。styleOf() の番号と、ひも付いています */
+      '<cellXfs count="8">' +
+        /* 0 本文 */
         '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
           '<alignment vertical="top" wrapText="1"/></xf>' +
+        /* 1 見出し */
         '<xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
-          '<alignment vertical="top" wrapText="1"/></xf>' +
+          '<alignment vertical="bottom" wrapText="1"/></xf>' +
+        /* 2 題名 */
         '<xf numFmtId="49" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
           '<alignment horizontal="center" vertical="center"/></xf>' +
+        /* 3 右寄せ（契約日） */
         '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
           '<alignment horizontal="right" vertical="top" wrapText="1"/></xf>' +
+        /* 4 本文（字下げ1：駐車場の表示など） */
+        '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment horizontal="left" vertical="top" wrapText="1" indent="1"/></xf>' +
+        /* 5 本文（字下げ2：番号つきの箇条書き） */
+        '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1">' +
+          '<alignment horizontal="left" vertical="top" wrapText="1" indent="2"/></xf>' +
+        /* 6 本文＋下線（署名欄の住所・氏名） */
+        '<xf numFmtId="49" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1">' +
+          '<alignment vertical="bottom" wrapText="1"/></xf>' +
+        /* 7 見出し＋上の区切り線（署名欄のはじまり） */
+        '<xf numFmtId="49" fontId="1" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1">' +
+          '<alignment vertical="bottom" wrapText="1"/></xf>' +
       '</cellXfs>' +
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
       '</styleSheet>';
@@ -305,7 +383,7 @@
       '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
       '</Types>';
 
-    return {
+    var out = {
       '[Content_Types].xml': types,
       '_rels/.rels': rootRels,
       'xl/workbook.xml': workbook,
@@ -313,6 +391,52 @@
       'xl/styles.xml': styles,
       'xl/worksheets/sheet1.xml': sheet
     };
+
+    /* ★ 会社印（画像）。.xlsx では、絵は別の部品として入れます。
+         EMU という単位で置き場所と大きさを書きます（1インチ＝914400）。 */
+    if(ink){
+      var EMU_RIGHT = 4400000;   /* 段の右のほう  */
+      var EMU_SIZE  = 620000;    /* だいたい17mm角 */
+      out['xl/media/image1.png'] = ink;
+      out['xl/drawings/drawing1.xml'] =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"' +
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+        '<xdr:oneCellAnchor>' +
+          '<xdr:from><xdr:col>2</xdr:col><xdr:colOff>' + EMU_RIGHT + '</xdr:colOff>' +
+          '<xdr:row>' + inkanRow + '</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+          '<xdr:ext cx="' + EMU_SIZE + '" cy="' + EMU_SIZE + '"/>' +
+          '<xdr:pic>' +
+            '<xdr:nvPicPr><xdr:cNvPr id="1" name="会社印"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
+            '<xdr:blipFill>' +
+              '<a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/>' +
+              '<a:stretch><a:fillRect/></a:stretch>' +
+            '</xdr:blipFill>' +
+            '<xdr:spPr>' +
+              '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' + EMU_SIZE + '" cy="' + EMU_SIZE + '"/></a:xfrm>' +
+              '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+            '</xdr:spPr>' +
+          '</xdr:pic>' +
+          '<xdr:clientData/>' +
+        '</xdr:oneCellAnchor></xdr:wsDr>';
+      out['xl/drawings/_rels/drawing1.xml.rels'] =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>' +
+        '</Relationships>';
+      out['xl/worksheets/_rels/sheet1.xml.rels'] =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>' +
+        '</Relationships>';
+      out['[Content_Types].xml'] = types.replace(
+        '<Default Extension="xml" ContentType="application/xml"/>',
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Default Extension="png" ContentType="image/png"/>').replace(
+        '</Types>',
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+    }
+    return out;
   };
 
   /* ------------------------------------------------------------------
@@ -355,7 +479,8 @@
     var local = [], i, j, nb, db, cr;
     for(i = 0; i < names.length; i++){
       nb = utf8(names[i]);
-      db = utf8(parts[names[i]]);
+      /* 文字はそのまま、画像（バイト列）はそのまま入れます */
+      db = (parts[names[i]] instanceof Uint8Array) ? parts[names[i]] : utf8(parts[names[i]]);
       cr = crc32(db);
 
       var h = [];
