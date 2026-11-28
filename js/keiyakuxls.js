@@ -141,6 +141,7 @@
             文字を大きめにしてあるのは、はみ出したぶんは Excel が
             自動で縮めてくれるからです（足りないぶんは、足してくれません）。
      ------------------------------------------------------------------ */
+  var ROW_H = 28;            /* 1行ぶんの高さ        */
   var COL_TEXT = 66;         /* 本文の段。左右2つ    */
   var COL_GAP  = 3.6;        /* まん中の、とじしろ   */
 
@@ -154,9 +155,60 @@
   /* 0:本文  1:見出し  2:題名  3:右寄せ */
   function styleOf(p){ return p.b ? 1 : (p.r ? 3 : 0); }
 
+  /* ------------------------------------------------------------------
+     ★★2026/11/28 「1マス＝1行」に組みなおしました。
+
+     それまでは「1マス＝1段落」でした。表の行の高さは、左と右の
+     高いほうに合います。右が4行のところは、左が1行でも4行ぶんの
+     高さになり、左にぽっかり空きができます。段落が長いほど目立ち、
+     「バランスが悪い」のはこれが理由でした。
+
+     いまは、こちらで文を1行ずつに切ってから並べます。
+     どの行も1行ぶんの高さなので、左も右も、同じ間隔で流れます。
+
+     行の切りかたは、1行に入る文字数（CPL）で決めます。
+     少なめにしてあります。多すぎると Excel 側でもう一度折り返され、
+     その行だけ2行ぶんの高さになって、また段差ができるからです。
+     行のあたまに置けない字（。、」など）は、前の行にぶら下げます。
+     ------------------------------------------------------------------ */
+  var CPL = 42;        /* 本文1行に入る字数（全角を1と数えます） */
+  var CPL_HEAD = 38;   /* 見出しは字が大きいので、少なめ           */
+  var NO_HEAD = '、。，．・：；？！）」』】〕｝〉》”’ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮーヽヾ々';
+
+  function chWidth(ch){
+    var c = ch.charCodeAt(0);
+    return (c < 0x100 || (c >= 0xFF61 && c <= 0xFF9F)) ? 0.5 : 1;
+  }
+  function wrapLines(text, cpl){
+    var out = [], line = '', w = 0, i, ch, cw;
+    for(i = 0; i < text.length; i++){
+      ch = text.charAt(i); cw = chWidth(ch);
+      if(w + cw > cpl){
+        /* 行のあたまに置けない字は、はみ出してでも前の行に置きます */
+        if(NO_HEAD.indexOf(ch) >= 0 && w + cw <= cpl + 1.5){ line += ch; w += cw; continue; }
+        out.push(line); line = ch; w = cw;
+      }else{
+        line += ch; w += cw;
+      }
+    }
+    if(line !== '') out.push(line);
+    if(out.length === 0) out.push('');
+    return out;
+  }
+  /* 段落の並びを、1行ずつの並びに開きます */
+  function toLines(paras){
+    var out = [], i, j, ls;
+    for(i = 0; i < paras.length; i++){
+      if(paras[i].t === ''){ out.push({ t:'', b:false, r:false }); continue; }
+      ls = wrapLines(paras[i].t, paras[i].b ? CPL_HEAD : CPL);
+      for(j = 0; j < ls.length; j++) out.push({ t:ls[j], b:paras[i].b, r:paras[i].r });
+    }
+    return out;
+  }
+
   window.buildKeiyakuXlsxParts = function(data){
     var doc = window.buildKeiyakuDoc(data);
-    var L = doc.left, R = doc.right;
+    var L = toLines(doc.left), R = toLines(doc.right);
     var n = Math.max(L.length, R.length);
     var rows = '', k, r, c;
 
@@ -169,7 +221,8 @@
       c = '';
       if(L[k] && L[k].t !== '') c += cellXml('A' + r, styleOf(L[k]), L[k].t);
       if(R[k] && R[k].t !== '') c += cellXml('C' + r, styleOf(R[k]), R[k].t);
-      rows += '<row r="' + r + '">' + c + '</row>';
+      /* どの行も、同じ高さにします（1行ぶん） */
+      rows += '<row r="' + r + '" ht="' + ROW_H + '" customHeight="1">' + c + '</row>';
     }
 
     var sheet =

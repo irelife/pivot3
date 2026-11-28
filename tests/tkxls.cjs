@@ -124,6 +124,18 @@ function unzip(bytes){
  const styles = (files && files['xl/styles.xml']) || '';
  const wb = (files && files['xl/workbook.xml']) || '';
 
+ /* ★2026/11/28 1マス＝1行に組みなおしたので、文のとちゅうで行が変わります。
+      中身を見るときは、段ごとに1本につなげてから探します。
+      （つなげずに探すと「振込にて支払う」のような言いまわしが、
+        行の変わり目でちぎれていて、見つかりません）                  */
+ function colText(letter){
+   const re = new RegExp('<c r="'+letter+'\\d+"[^>]*><is><t[^>]*>([^<]*)<\\/t>','g');
+   let m, out = '';
+   while((m = re.exec(sheet)) !== null) out += m[1];
+   return out;
+ }
+ const textA = colText('A'), textC = colText('C'), textAll = textA + '\n' + textC;
+
  console.log('\n❹ ★★ 紙の設定（これが前は1つも届いていませんでした）');
  ok('★★ A3（paperSize 8）', /paperSize="8"/.test(sheet));
  ok('★★ 横（landscape）',   /orientation="landscape"/.test(sheet));
@@ -162,41 +174,58 @@ function unzip(bytes){
  ok('★★ 特約事項：第10条 は右（C列）', colOf('特約事項：第10条') === 'C', colOf('特約事項：第10条'));
  ok('★★ 署名欄は右（C列）',            colOf('賃貸代理人(甲)') === 'C', colOf('賃貸代理人(甲)'));
 
+ console.log('\n❺-2 ★★ 1マス＝1行に組んである（段のあいだに空きを作らない）');
+ /* ★2026/11/28 1マス＝1段落だったころは、行の高さが左右の高いほうに
+      合うので、左にぽっかり空きができていました。1行ずつにすると、
+      左も右も同じ間隔で流れます。                                   */
+ ok('★★ どの行も、同じ高さにしてある',
+    (sheet.match(/<row r="\d+" ht="(\d+)" customHeight="1">/g) || []).length >= 20);
+ ok('★★ 1マスに、長い文が丸ごと入っていない（1行ぶんに切ってある）', (function(){
+      const re = /<is><t[^>]*>([^<]*)<\/t>/g;
+      let m, longest = 0, w;
+      while((m = re.exec(sheet)) !== null){
+        w = 0;
+        for(const ch of m[1]){ const c = ch.codePointAt(0); w += (c < 0x100 || (c >= 0xFF61 && c <= 0xFF9F)) ? 0.5 : 1; }
+        if(w > longest) longest = w;
+      }
+      return longest <= 44;   /* 1行に入る字数（42）＋ ぶら下げ */
+    })());
+
  console.log('\n❻ ★★ 中身が、印刷の契約書とそろっている');
  const must = ['駐車場賃貸借契約書','目的：第1条','賃料：第2条','賃貸借期間：第3条','禁止事項：第4条',
                '甲の免責事項：第5条','解約：第6条','契約解除：第7条','明け渡し：第8条','協議：第9条','特約事項：第10条'];
- must.forEach(function(m){ ok('★★ ' + m + ' がある', sheet.indexOf(m) >= 0); });
+ must.forEach(function(m){ ok('★★ ' + m + ' がある', textAll.indexOf(m) >= 0); });
 
  console.log('\n❼ ★★ 画面で入れた値が入っている');
- ok('★★ 物件名', sheet.indexOf('ノスタルジア') >= 0);
- ok('★★ 区画',   sheet.indexOf('P5') >= 0);
- ok('★★ 賃借人', sheet.indexOf('山田 太郎') >= 0);
- ok('★★ 賃料と消費税（5,500円・500円）', sheet.indexOf('5,500') >= 0 && sheet.indexOf('500') >= 0);
- ok('★★ 支払日（末日）',       sheet.indexOf('毎月末日') >= 0);
- ok('★★ 支払い方法（振込）',   sheet.indexOf('振込にて支払う') >= 0);
- ok('★★ 期間（2026年12月1日から）', sheet.indexOf('2026年12月1日') >= 0);
- ok('★★ 期間（2028年11月30日まで）', sheet.indexOf('2028年11月30日') >= 0);
- ok('★★ 契約日',               sheet.indexOf('2026年11月27日') >= 0);
- ok('★★ 会社名',               sheet.indexOf('IREライフ株式会社') >= 0);
- ok('★★ 登録番号',             sheet.indexOf('T1234567890123') >= 0);
- ok('★★ 賃借人(乙)の住所',     sheet.indexOf('ノスタルジア 205号') >= 0);
- ok('★ 押印欄がある（甲・乙とも）', (sheet.match(/印/g) || []).length >= 2);
+ ok('★★ 物件名', textAll.indexOf('ノスタルジア') >= 0);
+ ok('★★ 区画',   textAll.indexOf('P5') >= 0);
+ ok('★★ 賃借人', textAll.indexOf('山田 太郎') >= 0);
+ ok('★★ 賃料と消費税（5,500円・500円）', textAll.indexOf('5,500') >= 0 && textAll.indexOf('500') >= 0);
+ ok('★★ 支払日（末日）',       textAll.indexOf('毎月末日') >= 0);
+ ok('★★ 支払い方法（振込）',   textAll.indexOf('振込にて支払う') >= 0);
+ ok('★★ 期間（2026年12月1日から）', textAll.indexOf('2026年12月1日') >= 0);
+ ok('★★ 期間（2028年11月30日まで）', textAll.indexOf('2028年11月30日') >= 0);
+ ok('★★ 契約日',               textAll.indexOf('2026年11月27日') >= 0);
+ ok('★★ 会社名',               textAll.indexOf('IREライフ株式会社') >= 0);
+ ok('★★ 登録番号',             textAll.indexOf('T1234567890123') >= 0);
+ ok('★★ 賃借人(乙)の住所',     textAll.indexOf('ノスタルジア 205号') >= 0);
+ ok('★ 押印欄がある（甲・乙とも）', (textAll.match(/印/g) || []).length >= 2);
 
  console.log('\n❽ ★★ 特約の追記が、4番目から並ぶ');
- ok('★★ 追記1つめが入っている', sheet.indexOf('居室契約が終わったら') >= 0);
- const i4 = sheet.indexOf('>4. 居室契約が終わったら');
- const i5 = sheet.indexOf('>5. 車両の');
+ ok('★★ 追記1つめが入っている', textAll.indexOf('居室契約が終わったら') >= 0);
+ const i4 = textC.indexOf('4. 居室契約が終わったら');
+ const i5 = textC.indexOf('5. 車両の');
  ok('★★ 番号が 4 から始まる', i4 >= 0, i4);
  ok('★★ 2つめは 5 になる',    i5 > i4, { i4:i4, i5:i5 });
  ok('★★ もとからの3つは、そのまま1〜3',
-    sheet.indexOf('>1. 乙の希望により') >= 0 &&
-    sheet.indexOf('>2. 賃料及び証明書等発行料') >= 0 &&
-    sheet.indexOf('>3. 甲乙共に反社会的勢力') >= 0);
+    textC.indexOf('1. 乙の希望により') >= 0 &&
+    textC.indexOf('2. 賃料及び証明書等発行料') >= 0 &&
+    textC.indexOf('3. 甲乙共に反社会的勢力') >= 0);
  const noTk = await pg.evaluate((d)=>{
    const p = window.buildKeiyakuXlsxParts(Object.assign({}, d, { tokuyaku:[] }));
    return p['xl/worksheets/sheet1.xml'];
  }, DATA);
- ok('★★ 追記が無いときは 4 番が出ない', noTk.indexOf('>4. ') < 0);
+ ok('★★ 追記が無いときは 4 番が出ない', noTk.indexOf('>4. ') < 0 && noTk.indexOf('4. 居室契約') < 0);
 
  console.log('\n❾ ★★ 記号を入れても壊れない');
  ok('★★ < > & がそのまま出ていない',
@@ -268,7 +297,7 @@ function unzip(bytes){
  ok('★★ 駐車場の所在地を、乙の住所として出していない',
     sign.indexOf(DATA.bldAddr) < 0, sign.slice(0,200));
  ok('★★ Excel と印刷で、乙の住所がそろっている',
-    sheet.indexOf('ノスタルジア 205号') >= 0 && sign.indexOf('ノスタルジア 205号') >= 0);
+    textAll.indexOf('ノスタルジア 205号') >= 0 && sign.indexOf('ノスタルジア 205号') >= 0);
 
  console.log('\n⓭ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);
