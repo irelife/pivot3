@@ -100,6 +100,10 @@ function unzip(bytes){
  const pg=await b.newPage({viewport:{width:900,height:700}});
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message.slice(0,160)));
  await pg.goto('about:blank');
+ /* ★ 本物の画面と同じ順に読みます。会社印（INKAN_BASE64）は
+      js/buildings.js にあり、Excel 出力はそれを借りています。     */
+ await pg.evaluate(()=>{ window.escapeHtml = (x)=>String(x==null?'':x); });
+ await pg.addScriptTag({ path: path.join(DIR,'js','buildings.js') });
  await pg.addScriptTag({ path: path.join(DIR,'js','keiyakuxls.js') });
 
  console.log('\n❷ 道具がある');
@@ -135,6 +139,9 @@ function unzip(bytes){
    return out;
  }
  const textA = colText('A'), textC = colText('C'), textAll = textA + '\n' + textC;
+ /* ★2026/11/28 題名は、印刷と同じく字間をあけてあります（駐 車 場 …）。
+      中身をさがすときは、全角の空白を取りのぞいてから見ます。      */
+ const textFlat = textAll.replace(/\u3000/g, '');
 
  console.log('\n❹ ★★ 紙の設定（これが前は1つも届いていませんでした）');
  ok('★★ A3（paperSize 8）', /paperSize="8"/.test(sheet));
@@ -159,7 +166,11 @@ function unzip(bytes){
       return w.length===3 && w[1] < w[0] && w[1] < w[2] && w[0]===w[2];
     })(), sheet.match(/<col [^>]*>/g));
  ok('★★ 題名は3つの段をつないで、1行めにある',
-    /<mergeCell ref="A1:C1"\/>/.test(sheet) && /r="A1"[^>]*><is><t[^>]*>駐車場賃貸借契約書/.test(sheet));
+    /<mergeCell ref="A1:C1"\/>/.test(sheet) &&
+    /r="A1"[^>]*><is><t[^>]*>駐(　| )車/.test(sheet));
+ /* ★ 印刷の題名は字間が広い（letter-spacing）ので、空白を入れてそろえています */
+ ok('★★ 題名の字間があけてある（印刷と同じ見え方）',
+    /<is><t[^>]*>駐　車　場　賃　貸　借　契　約　書</.test(sheet));
 
  /* A列＝左の段、C列＝右の段。印刷と同じ区切りかを見ます */
  function colOf(word){
@@ -191,10 +202,29 @@ function unzip(bytes){
       return longest <= 44;   /* 1行に入る字数（42）＋ ぶら下げ */
     })());
 
+ console.log('\n❺-3 ★★ 印刷と同じ見た目になっている');
+ /* ★2026/11/28 印刷（js/buildings.js）の CSS とそろえています。
+      直すときは、両方いっしょに。                                   */
+ ok('★★ 字下げがある（箇条書き・駐車場の表示）',
+    /indent="1"/.test(styles) && /indent="2"/.test(styles));
+ ok('★ 字下げは「左よせ」といっしょに指定してある（でないと効きません）',
+    (styles.match(/horizontal="left"[^>]*indent="/g) || []).length >= 2);
+ ok('★★ 署名欄に下線がある', /<bottom style="thin">/.test(styles));
+ ok('★★ 署名欄の上に区切り線がある', /<top style="thin">/.test(styles));
+ ok('★★ 見出しの行は、本文の行より高い（上にすき間を作る）', (function(){
+      const hs = (sheet.match(/<row r="\d+" ht="(\d+)"/g) || []).map(x=>parseInt(x.match(/ht="(\d+)"/)[1],10));
+      const uniq = [...new Set(hs)];
+      return uniq.length >= 2 && Math.max(...uniq) > Math.min(...uniq);
+    })());
+ ok('★ 会社印（画像）が入っている（印刷と同じもの）',
+    !!files && files['xl/media/image1.png'] !== undefined &&
+    files['xl/drawings/drawing1.xml'] !== undefined &&
+    /<drawing r:id="rId1"\/>/.test(sheet));
+
  console.log('\n❻ ★★ 中身が、印刷の契約書とそろっている');
  const must = ['駐車場賃貸借契約書','目的：第1条','賃料：第2条','賃貸借期間：第3条','禁止事項：第4条',
                '甲の免責事項：第5条','解約：第6条','契約解除：第7条','明け渡し：第8条','協議：第9条','特約事項：第10条'];
- must.forEach(function(m){ ok('★★ ' + m + ' がある', textAll.indexOf(m) >= 0); });
+ must.forEach(function(m){ ok('★★ ' + m + ' がある', textFlat.indexOf(m) >= 0); });
 
  console.log('\n❼ ★★ 画面で入れた値が入っている');
  ok('★★ 物件名', textAll.indexOf('ノスタルジア') >= 0);
