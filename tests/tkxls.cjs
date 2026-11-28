@@ -3,15 +3,23 @@
  *   単発の変わった契約は、手で直したほうが早いことがあります。
  *   そのための出力です（PIVOT4 だけ）。
  *
+ *   ★2026/11/27 作りかたを変えました。
+ *     それまでは「HTML の表を .xls という名前で落とす」やりかたでした。
+ *     中身は出るのですが、紙の設定（A3・横・まん中）が Excel にも
+ *     LibreOffice にも、ひとつも届きませんでした。3回直して3回とも
+ *     届かなかったので、本物の .xlsx を組み立てる形に変えました。
+ *     .xlsx は、XML を ZIP で固めたものです。紙の設定はそこに書けます。
+ *
  *   見張ること
- *     ① 印刷の契約書と、中身がそろっている（条文10個・金額・期間・特約）
- *     ② 印刷と同じ「A3横・2段組」の形で出る（左段・とじしろ・右段）
- *     ③ Excel が開ける形になっている（表＋Excel の目印）
- *     ④ 特約の追記が、4番目から並ぶ
- *     ⑤ 記号（< > &）を入れても、画面が壊れない
- *     ⑥ ファイル名に、物件名と区画が入る
- *     ⑦ PIVOT4 だけに入っている（PIVOT3 には入れない）
- *     ⑧ 印刷のほうも、乙の住所が「乙の住所」になっている（物件の住所ではない）
+ *     ① 本物の .xlsx になっている（ZIP として開ける・中の部品がそろう）
+ *     ② 紙の設定が入っている（A3・横・まん中・1ページ）
+ *     ③ 印刷の契約書と、中身がそろっている（条文10個・金額・期間・特約）
+ *     ④ 左の段＝A列、右の段＝C列（印刷と同じ区切り）
+ *     ⑤ 特約の追記が、4番目から並ぶ
+ *     ⑥ 記号（< > &）を入れても、ファイルが壊れない
+ *     ⑦ ファイル名に、物件名と区画が入る
+ *     ⑧ PIVOT4 だけに入っている（PIVOT3 には入れない）
+ *     ⑨ 印刷のほうも、乙の住所が「乙の住所」になっている
  */
 const fs=require('fs');
 const path=require('path');
@@ -33,6 +41,49 @@ const DATA = {
             rep_title:'代表取締役', rep_name:'淺野 充弘', invoice_no:'T1234567890123' }
 };
 
+/* ---- ここだけの、小さな ZIP 読み取り ----
+     本物の .xlsx になっているかを、自分の目で確かめるために使います。
+     外の部品は足しません（増やすと、いつか動かなくなる場所が増えます）。 */
+function crc32(buf){
+  let t = crc32._t;
+  if(!t){
+    t = crc32._t = new Uint32Array(256);
+    for(let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[i]=c>>>0; }
+  }
+  let c = 0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++) c = t[(c ^ buf[i]) & 0xFF] ^ (c>>>8);
+  return (c ^ 0xFFFFFFFF)>>>0;
+}
+function unzip(bytes){
+  const b = Buffer.from(bytes);
+  /* おしまいの目印をさがす */
+  let end = -1;
+  for(let i=b.length-22;i>=0;i--){ if(b.readUInt32LE(i)===0x06054b50){ end=i; break; } }
+  if(end<0) throw new Error('ZIP のおしまいの目印がありません');
+  const count = b.readUInt16LE(end+10);
+  let p = b.readUInt32LE(end+16);
+  const out = {};
+  for(let i=0;i<count;i++){
+    if(b.readUInt32LE(p)!==0x02014b50) throw new Error('目録の目印がちがいます');
+    const method = b.readUInt16LE(p+10);
+    const crc    = b.readUInt32LE(p+16);
+    const size   = b.readUInt32LE(p+24);
+    const nlen   = b.readUInt16LE(p+28);
+    const elen   = b.readUInt16LE(p+30);
+    const clen   = b.readUInt16LE(p+32);
+    const off    = b.readUInt32LE(p+42);
+    const name   = b.slice(p+46, p+46+nlen).toString('utf8');
+    if(method!==0) throw new Error('縮めない形のはずです: '+name);
+    if(b.readUInt32LE(off)!==0x04034b50) throw new Error('中身の目印がちがいます: '+name);
+    const lnlen = b.readUInt16LE(off+26), lelen = b.readUInt16LE(off+28);
+    const data = b.slice(off+30+lnlen+lelen, off+30+lnlen+lelen+size);
+    if(crc32(data)!==crc) throw new Error('中身がこわれています: '+name);
+    out[name] = data.toString('utf8');
+    p += 46 + nlen + elen + clen;
+  }
+  return out;
+}
+
 (async()=>{
  const p3 = fs.readFileSync(path.join(DIR,'index.html'),'utf8');
  const p4 = fs.readFileSync(path.join(DIR,'pivot4','index.html'),'utf8');
@@ -52,116 +103,116 @@ const DATA = {
  await pg.addScriptTag({ path: path.join(DIR,'js','keiyakuxls.js') });
 
  console.log('\n❷ 道具がある');
- ok('★ buildKeiyakuXlsHtml がある', await pg.evaluate(()=>typeof window.buildKeiyakuXlsHtml==='function'));
- ok('★ buildKeiyakuXlsName がある', await pg.evaluate(()=>typeof window.buildKeiyakuXlsName==='function'));
- ok('★ exportKeiyakuXls がある',    await pg.evaluate(()=>typeof window.exportKeiyakuXls==='function'));
+ ok('★ buildKeiyakuDoc がある',        await pg.evaluate(()=>typeof window.buildKeiyakuDoc==='function'));
+ ok('★ buildKeiyakuXlsxParts がある',  await pg.evaluate(()=>typeof window.buildKeiyakuXlsxParts==='function'));
+ ok('★ buildKeiyakuXlsxZip がある',    await pg.evaluate(()=>typeof window.buildKeiyakuXlsxZip==='function'));
+ ok('★ buildKeiyakuXlsName がある',    await pg.evaluate(()=>typeof window.buildKeiyakuXlsName==='function'));
+ ok('★ exportKeiyakuXls がある',       await pg.evaluate(()=>typeof window.exportKeiyakuXls==='function'));
 
- const html = await pg.evaluate((d)=>window.buildKeiyakuXlsHtml(d), DATA);
+ const raw = await pg.evaluate((d)=>Array.from(window.buildKeiyakuXlsxZip(window.buildKeiyakuXlsxParts(d))), DATA);
 
- console.log('\n❸ ★ Excel が開ける形');
- ok('★★ 表になっている', /<table/.test(html) && /<\/table>/.test(html));
- ok('★★ Excel の目印がある（ExcelWorkbook）', /x:ExcelWorkbook/.test(html));
- ok('★★ シート名が入っている', /<x:Name>駐車場賃貸借契約書<\/x:Name>/.test(html));
- ok('★★ 文字として扱う指定がある（勝手に数字にしない）', /mso-number-format/.test(html));
+ console.log('\n❸ ★★ 本物の .xlsx になっている');
+ let files = null, zipErr = null;
+ try{ files = unzip(raw); }catch(e){ zipErr = String(e && e.message || e); }
+ ok('★★ ZIP として開ける（中身がこわれていない）', !!files, zipErr);
+ const need = ['[Content_Types].xml','_rels/.rels','xl/workbook.xml',
+               'xl/_rels/workbook.xml.rels','xl/styles.xml','xl/worksheets/sheet1.xml'];
+ need.forEach(function(n){ ok('★★ 部品がある: '+n, !!files && files[n] !== undefined); });
+ ok('★ 先頭が ZIP の目印（PK）', raw[0]===0x50 && raw[1]===0x4b && raw[2]===0x03 && raw[3]===0x04);
 
- console.log('\n❸-2 ★★ 印刷と同じ「A3横・2段組」になっている');
- /* 題名は3列ぶちぬき。そのあとは「左段・とじしろ・右段」の3列が並びます */
- ok('★★ 題名が1行めにある（3列ぶちぬき）',
-    /<tr><td class="t" colspan="3">駐車場賃貸借契約書<\/td><\/tr>/.test(html));
- const rows = html.split('<tr>').slice(2);     /* 題名の行を除いた、本文の行 */
- ok('★★ 本文の行がある', rows.length >= 20, rows.length);
- ok('★★ どの行も「左段・とじしろ・右段」の3マス',
-    rows.every(function(r){ return (r.match(/<td /g) || []).length === 3; }),
-    rows.filter(function(r){ return (r.match(/<td /g) || []).length !== 3; }).slice(0,2));
- ok('★★ まん中はとじしろ（td.g）',
-    rows.every(function(r){ return /<td class="g">/.test(r); }));
- ok('★★ A3 の指定がある（PaperSizeIndex 8）', /<x:PaperSizeIndex>8<\/x:PaperSizeIndex>/.test(html));
- ok('★★ 横置きの指定がある', /x:Orientation="Landscape"/.test(html));
- /* ★2026/11/27 これが無いと Excel は紙の左上に寄せるので、下が大きく空きます */
- ok('★★ 紙のまん中に置く指定がある（上に寄らない）',
-    /x:CenterVertical="1"/.test(html) && /x:CenterHorizontal="1"/.test(html));
- /* ★★2026/11/27 ここが本題です。
-      Excel は WorksheetOptions の中を、決まった順番でしか読みません。
-      順番がちがうと、黙って全部を捨てます（エラーも出ません）。
-      じっさい Print を先に書いていたために、A3 も 横 も まん中 も、
-      ひとつも効いていませんでした。順番そのものを見張ります。     */
- const opt = html.slice(html.indexOf('<x:WorksheetOptions>'), html.indexOf('</x:WorksheetOptions>'));
- const iPage = opt.indexOf('<x:PageSetup>');
- const iFit  = opt.indexOf('<x:FitToPage/>');
- const iPrn  = opt.indexOf('<x:Print>');
- ok('★★ PageSetup → FitToPage → Print の順になっている',
-    iPage >= 0 && iFit > iPage && iPrn > iFit, { PageSetup:iPage, FitToPage:iFit, Print:iPrn });
- ok('★★ 紙の向きは PageSetup の中にある',
-    opt.indexOf('x:Orientation="Landscape"') > iPage &&
-    opt.indexOf('x:Orientation="Landscape"') < iFit);
- ok('★★ 紙の大きさ（A3）は Print の中にある',
-    opt.indexOf('<x:PaperSizeIndex>8</x:PaperSizeIndex>') > iPrn);
- ok('★★ 1ページに収める指定がある',
-    /<x:FitWidth>1<\/x:FitWidth>/.test(html) && /<x:FitHeight>1<\/x:FitHeight>/.test(html) && /<x:FitToPage\/>/.test(html));
- ok('★ 見出しは太字の指定（td.hd）がついている',
-    html.indexOf('class="p hd">目的：第1条') >= 0 && html.indexOf('class="p hd">特約事項：第10条') >= 0);
- /* 印刷と同じ区切り：第1〜6条は左の段、第7〜10条と署名欄は右の段 */
- const side = function(word){
-   const r = rows.filter(function(x){ return x.indexOf(word) >= 0; })[0] || '';
-   const g = r.indexOf('<td class="g">');
-   const w = r.indexOf(word);
-   return (g < 0 || w < 0) ? '?' : (w < g ? '左' : '右');
- };
- ok('★★ 目的：第1条 は左の段',     side('目的：第1条') === '左', side('目的：第1条'));
- ok('★★ 解約：第6条 は左の段',     side('解約：第6条') === '左', side('解約：第6条'));
- ok('★★ 契約解除：第7条 は右の段', side('契約解除：第7条') === '右', side('契約解除：第7条'));
- ok('★★ 特約事項：第10条 は右の段',side('特約事項：第10条') === '右', side('特約事項：第10条'));
- ok('★★ 署名欄は右の段',           side('賃貸代理人(甲)') === '右', side('賃貸代理人(甲)'));
- ok('★★ 表の線は引かない（契約書なので）', /td\{border:none/.test(html));
+ const sheet = (files && files['xl/worksheets/sheet1.xml']) || '';
+ const styles = (files && files['xl/styles.xml']) || '';
+ const wb = (files && files['xl/workbook.xml']) || '';
 
- console.log('\n❹ ★★ 中身が、印刷の契約書とそろっている');
+ console.log('\n❹ ★★ 紙の設定（これが前は1つも届いていませんでした）');
+ ok('★★ A3（paperSize 8）', /paperSize="8"/.test(sheet));
+ ok('★★ 横（landscape）',   /orientation="landscape"/.test(sheet));
+ ok('★★ 紙のまん中に置く',
+    /horizontalCentered="1"/.test(sheet) && /verticalCentered="1"/.test(sheet));
+ ok('★★ 1ページに収める',
+    /<pageSetUpPr fitToPage="1"\/>/.test(sheet) &&
+    /fitToWidth="1"/.test(sheet) && /fitToHeight="1"/.test(sheet));
+ ok('★ 余白が入っている', /<pageMargins /.test(sheet));
+ ok('★ マス目の線は出さない', /showGridLines="0"/.test(sheet));
+ ok('★★ シート名が契約書になっている', /name="駐車場賃貸借契約書"/.test(wb));
+ ok('★★ 文字あつかいの指定（「P5」を数字にしない）',
+    (styles.match(/numFmtId="49"/g)||[]).length >= 4);
+
+ console.log('\n❺ ★★ 段の組みかた（印刷と同じ A3横・2段組）');
+ ok('★★ 段が3つ（左・とじしろ・右）',
+    /<col min="1" max="1"/.test(sheet) && /<col min="2" max="2"/.test(sheet) && /<col min="3" max="3"/.test(sheet));
+ ok('★★ まん中のとじしろが、いちばん細い', (function(){
+      const m = sheet.match(/<col min="\d" max="\d" width="([\d.]+)"/g) || [];
+      const w = m.map(x=>parseFloat(x.match(/width="([\d.]+)"/)[1]));
+      return w.length===3 && w[1] < w[0] && w[1] < w[2] && w[0]===w[2];
+    })(), sheet.match(/<col [^>]*>/g));
+ ok('★★ 題名は3つの段をつないで、1行めにある',
+    /<mergeCell ref="A1:C1"\/>/.test(sheet) && /r="A1"[^>]*><is><t[^>]*>駐車場賃貸借契約書/.test(sheet));
+
+ /* A列＝左の段、C列＝右の段。印刷と同じ区切りかを見ます */
+ function colOf(word){
+   const re = new RegExp('<c r="([AC])\\d+"[^>]*><is><t[^>]*>[^<]*' +
+                         word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+   const m = sheet.match(re);
+   return m ? m[1] : '?';
+ }
+ ok('★★ 目的：第1条 は左（A列）',      colOf('目的：第1条') === 'A', colOf('目的：第1条'));
+ ok('★★ 解約：第6条 は左（A列）',      colOf('解約：第6条') === 'A', colOf('解約：第6条'));
+ ok('★★ 契約解除：第7条 は右（C列）',  colOf('契約解除：第7条') === 'C', colOf('契約解除：第7条'));
+ ok('★★ 特約事項：第10条 は右（C列）', colOf('特約事項：第10条') === 'C', colOf('特約事項：第10条'));
+ ok('★★ 署名欄は右（C列）',            colOf('賃貸代理人(甲)') === 'C', colOf('賃貸代理人(甲)'));
+
+ console.log('\n❻ ★★ 中身が、印刷の契約書とそろっている');
  const must = ['駐車場賃貸借契約書','目的：第1条','賃料：第2条','賃貸借期間：第3条','禁止事項：第4条',
                '甲の免責事項：第5条','解約：第6条','契約解除：第7条','明け渡し：第8条','協議：第9条','特約事項：第10条'];
- must.forEach(function(m){ ok('★★ ' + m + ' がある', html.indexOf(m) >= 0); });
+ must.forEach(function(m){ ok('★★ ' + m + ' がある', sheet.indexOf(m) >= 0); });
 
- console.log('\n❺ ★★ 画面で入れた値が入っている');
- ok('★★ 物件名', html.indexOf('ノスタルジア') >= 0);
- ok('★★ 区画',   html.indexOf('P5') >= 0);
- ok('★★ 賃借人', html.indexOf('山田 太郎') >= 0);
- ok('★★ 賃料と消費税（5,500円・500円）', html.indexOf('5,500') >= 0 && html.indexOf('500') >= 0);
- ok('★★ 支払日（末日）',       html.indexOf('毎月末日') >= 0, html.indexOf('末日'));
- ok('★★ 支払い方法（振込）',   html.indexOf('振込にて支払う') >= 0);
- ok('★★ 期間（2026年12月1日から）', html.indexOf('2026年12月1日') >= 0);
- ok('★★ 期間（2028年11月30日まで）', html.indexOf('2028年11月30日') >= 0);
- ok('★★ 契約日',               html.indexOf('2026年11月27日') >= 0);
- ok('★★ 会社名',               html.indexOf('IREライフ株式会社') >= 0);
- ok('★★ 登録番号',             html.indexOf('T1234567890123') >= 0);
- ok('★★ 賃借人(乙)の住所',     html.indexOf('ノスタルジア 205号') >= 0);
- ok('★ 押印欄がある（甲・乙とも）', (html.match(/印/g) || []).length >= 2);
+ console.log('\n❼ ★★ 画面で入れた値が入っている');
+ ok('★★ 物件名', sheet.indexOf('ノスタルジア') >= 0);
+ ok('★★ 区画',   sheet.indexOf('P5') >= 0);
+ ok('★★ 賃借人', sheet.indexOf('山田 太郎') >= 0);
+ ok('★★ 賃料と消費税（5,500円・500円）', sheet.indexOf('5,500') >= 0 && sheet.indexOf('500') >= 0);
+ ok('★★ 支払日（末日）',       sheet.indexOf('毎月末日') >= 0);
+ ok('★★ 支払い方法（振込）',   sheet.indexOf('振込にて支払う') >= 0);
+ ok('★★ 期間（2026年12月1日から）', sheet.indexOf('2026年12月1日') >= 0);
+ ok('★★ 期間（2028年11月30日まで）', sheet.indexOf('2028年11月30日') >= 0);
+ ok('★★ 契約日',               sheet.indexOf('2026年11月27日') >= 0);
+ ok('★★ 会社名',               sheet.indexOf('IREライフ株式会社') >= 0);
+ ok('★★ 登録番号',             sheet.indexOf('T1234567890123') >= 0);
+ ok('★★ 賃借人(乙)の住所',     sheet.indexOf('ノスタルジア 205号') >= 0);
+ ok('★ 押印欄がある（甲・乙とも）', (sheet.match(/印/g) || []).length >= 2);
 
- console.log('\n❻ ★★ 特約の追記が、4番目から並ぶ');
- ok('★★ 追記1つめが入っている', html.indexOf('居室契約が終わったら') >= 0);
- const i4 = html.indexOf('>4. 居室契約が終わったら');
- const i5 = html.indexOf('>5. 車両の');
+ console.log('\n❽ ★★ 特約の追記が、4番目から並ぶ');
+ ok('★★ 追記1つめが入っている', sheet.indexOf('居室契約が終わったら') >= 0);
+ const i4 = sheet.indexOf('>4. 居室契約が終わったら');
+ const i5 = sheet.indexOf('>5. 車両の');
  ok('★★ 番号が 4 から始まる', i4 >= 0, i4);
  ok('★★ 2つめは 5 になる',    i5 > i4, { i4:i4, i5:i5 });
  ok('★★ もとからの3つは、そのまま1〜3',
-    html.indexOf('>1. 乙の希望により') >= 0 &&
-    html.indexOf('>2. 賃料及び証明書等発行料') >= 0 &&
-    html.indexOf('>3. 甲乙共に反社会的勢力') >= 0);
- const noTk = await pg.evaluate((d)=>window.buildKeiyakuXlsHtml(Object.assign({}, d, { tokuyaku:[] })), DATA);
+    sheet.indexOf('>1. 乙の希望により') >= 0 &&
+    sheet.indexOf('>2. 賃料及び証明書等発行料') >= 0 &&
+    sheet.indexOf('>3. 甲乙共に反社会的勢力') >= 0);
+ const noTk = await pg.evaluate((d)=>{
+   const p = window.buildKeiyakuXlsxParts(Object.assign({}, d, { tokuyaku:[] }));
+   return p['xl/worksheets/sheet1.xml'];
+ }, DATA);
  ok('★★ 追記が無いときは 4 番が出ない', noTk.indexOf('>4. ') < 0);
 
- console.log('\n❼ ★★ 記号を入れても壊れない');
+ console.log('\n❾ ★★ 記号を入れても壊れない');
  ok('★★ < > & がそのまま出ていない',
-    html.indexOf('<入れ替え>') < 0 && html.indexOf('&lt;入れ替え&gt;') >= 0);
- ok('★★ & も直してある', html.indexOf('&amp; 承認') >= 0);
+    sheet.indexOf('<入れ替え>') < 0 && sheet.indexOf('&lt;入れ替え&gt;') >= 0);
+ ok('★★ & も直してある', sheet.indexOf('&amp; 承認') >= 0);
 
- console.log('\n❽ ★ ファイル名');
+ console.log('\n❿ ★ ファイル名');
  const nm = await pg.evaluate((d)=>window.buildKeiyakuXlsName(d), DATA);
- ok('★ .xls で終わる', /\.xls$/.test(nm), nm);
+ ok('★★ .xlsx で終わる', /\.xlsx$/.test(nm), nm);
  ok('★★ 物件名が入る', nm.indexOf('ノスタルジア') >= 0, nm);
  ok('★★ 区画が入る',   nm.indexOf('P5') >= 0, nm);
  const bad = await pg.evaluate(()=>window.buildKeiyakuXlsName({ bldName:'A/B:C*D?E"F<G>H|I', spotNo:'P1' }));
- ok('★★ ファイル名に使えない記号が落ちる', !/[\\\/:*?"<>|]/.test(bad.replace(/\.xls$/,'')), bad);
+ ok('★★ ファイル名に使えない記号が落ちる', !/[\\\/:*?"<>|]/.test(bad.replace(/\.xlsx$/,'')), bad);
 
  /* ---- ★ 印刷が壊れていないか（js/buildings.js を直したので） ---- */
- console.log('\n❾ ★★ 印刷（printKeiyaku）が、これまでどおり動く');
+ console.log('\n⓫ ★★ 印刷（printKeiyaku）が、これまでどおり動く');
  const pg2 = await b.newPage({viewport:{width:900,height:700}});
  const err2=[]; pg2.on('pageerror',e=>err2.push(e.message.slice(0,200)));
  pg2.on('dialog', d=>d.accept());
@@ -200,7 +251,7 @@ const DATA = {
  ok('★★ 印刷へ渡る中身：特約2件', !!got && (got.tokuyaku||[]).length === 2, got && got.tokuyaku);
  ok('★ 印刷のほうでエラーが出ていない', err2.length===0, err2);
 
- console.log('\n❾-2 ★★ 印刷の「賃借人(乙) 住所」が、乙の住所になっている');
+ console.log('\n⓬ ★★ 印刷の「賃借人(乙) 住所」が、乙の住所になっている');
  /* ★2026/11/27 ここは駐車場の所在地（物件の住所）が入っていました。
       画面で入れた「賃借人の住所」は集めてはいたのに、使われていませんでした。
       Excel 出力と食いちがっていたので直し、二度と戻らないよう見張ります。 */
@@ -217,9 +268,9 @@ const DATA = {
  ok('★★ 駐車場の所在地を、乙の住所として出していない',
     sign.indexOf(DATA.bldAddr) < 0, sign.slice(0,200));
  ok('★★ Excel と印刷で、乙の住所がそろっている',
-    html.indexOf('ノスタルジア 205号') >= 0 && sign.indexOf('ノスタルジア 205号') >= 0);
+    sheet.indexOf('ノスタルジア 205号') >= 0 && sign.indexOf('ノスタルジア 205号') >= 0);
 
- console.log('\n❿ 画面のエラー');
+ console.log('\n⓭ 画面のエラー');
  ok('★ エラーなし', errs.length===0, errs);
 
  await b.close();
