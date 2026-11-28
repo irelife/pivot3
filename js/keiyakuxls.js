@@ -252,6 +252,11 @@
   window.buildKeiyakuXlsxParts = function(data){
     var doc = window.buildKeiyakuDoc(data);
     var L = toLines(doc.left), R = toLines(doc.right);
+    /* ★2026/11/28 左の段を、1行ぶん下げます。
+         右の段は「契約解除：第7条」という見出しから始まります。
+         見出しは本文より字が大きいので、同じ高さに本文を置くと
+         左だけ上に浮いて見えます。1行ぶん下げて、そろえます。   */
+    L.unshift({ t:'', b:false, r:false, ind:0, ul:false, tb:false });
     var n = Math.max(L.length, R.length);
     var rows = '', k, r, c;
 
